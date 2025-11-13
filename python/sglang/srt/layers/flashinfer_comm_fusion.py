@@ -123,6 +123,13 @@ def ensure_workspace_initialized(
     return _workspace_manager.initialized
 
 
+def get_workspace_tensor():
+    """Get the workspace tensor if initialized, otherwise return None"""
+    if _workspace_manager.initialized:
+        return _workspace_manager.workspace_tensor
+    return None
+
+
 def flashinfer_allreduce_residual_rmsnorm(
     input_tensor: torch.Tensor,
     residual: torch.Tensor,
