@@ -35,6 +35,7 @@ from sglang.multimodal_gen.runtime.utils.logging_utils import (
     init_logger,
 )
 from sglang.multimodal_gen.runtime.utils.perf_logger import PerformanceLogger
+from sglang.multimodal_gen.runtime.entrypoints.utils import post_process_sample
 
 logger = init_logger(__name__)
 
@@ -138,6 +139,10 @@ class GPUWorker:
             else:
                 output_batch = result
 
+            duration_ms = (time.monotonic() - start_time) * 1000
+            if output_batch.timings is not None:
+                output_batch.timings.total_duration_ms = duration_ms
+
             if self.rank == 0:
                 t_mem_start = time.perf_counter()
                 peak_memory_bytes = torch.cuda.max_memory_allocated()
@@ -178,8 +183,55 @@ class GPUWorker:
                 except Exception:
                     pass
 
-            duration_ms = (time.monotonic() - start_time) * 1000
-            output_batch.timings.total_duration_ms = duration_ms
+            if (
+                self.rank == 0
+                and getattr(req, "save_output", False)
+                and not getattr(req, "return_frames", False)
+                and output_batch.output is not None
+            ):
+                saved_file_paths: list[str] = []
+                server_postprocess_timings: dict[str, float] = {
+                    "server_postprocess_total_s": 0.0,
+                    "server_postprocess_convert_s": 0.0,
+                    "server_postprocess_to_numpy_s": 0.0,
+                    "server_postprocess_save_s": 0.0,
+                }
+
+                t_server_post_start = time.perf_counter()
+                try:
+                    num_outputs = len(output_batch.output)
+                    for output_idx, sample in enumerate(output_batch.output):
+                        per_out_timings: dict[str, float] = {}
+                        save_file_path = req.output_file_path(num_outputs, output_idx)
+                        post_process_sample(
+                            sample,
+                            data_type=req.data_type,
+                            fps=req.fps,
+                            save_output=req.save_output,
+                            save_file_path=save_file_path,
+                            timings=per_out_timings,
+                        )
+                        if save_file_path is not None:
+                            saved_file_paths.append(save_file_path)
+
+                        server_postprocess_timings[
+                            "server_postprocess_convert_s"
+                        ] += per_out_timings.get("postprocess_convert_s", 0.0)
+                        server_postprocess_timings[
+                            "server_postprocess_to_numpy_s"
+                        ] += per_out_timings.get("postprocess_to_numpy_s", 0.0)
+                        server_postprocess_timings[
+                            "server_postprocess_save_s"
+                        ] += per_out_timings.get("postprocess_save_s", 0.0)
+                finally:
+                    server_postprocess_timings["server_postprocess_total_s"] = (
+                        time.perf_counter() - t_server_post_start
+                    )
+
+                if saved_file_paths:
+                    output_batch.saved_file_paths = saved_file_paths
+                    output_batch.server_postprocess_timings = server_postprocess_timings
+                    output_batch.output = None
 
             # TODO: extract to avoid duplication
             if req.perf_dump_path is not None or envs.SGLANG_DIFFUSION_STAGE_LOGGING:

@@ -228,12 +228,129 @@ class DiffGenerator:
                     if output_batch.error:
                         raise Exception(f"{output_batch.error}")
 
+                    server_saved_paths = getattr(output_batch, "saved_file_paths", None)
                     if output_batch.output is None:
+                        if server_saved_paths:
+                            server_post_t = getattr(
+                                output_batch, "server_postprocess_timings", None
+                            )
+                            if isinstance(server_post_t, dict):
+                                server_post_total_s = float(
+                                    server_post_t.get("server_postprocess_total_s", 0.0)
+                                )
+                                server_post_convert_s = float(
+                                    server_post_t.get(
+                                        "server_postprocess_convert_s", 0.0
+                                    )
+                                )
+                                server_post_to_numpy_s = float(
+                                    server_post_t.get(
+                                        "server_postprocess_to_numpy_s", 0.0
+                                    )
+                                )
+                                server_post_save_s = float(
+                                    server_post_t.get("server_postprocess_save_s", 0.0)
+                                )
+                            else:
+                                server_post_total_s = 0.0
+                                server_post_convert_s = 0.0
+                                server_post_to_numpy_s = 0.0
+                                server_post_save_s = 0.0
+
+                            logger.info(
+                                "[TimingBreakdown] scheduler_roundtrip=%.4fs, server_postprocess_total=%.4fs (convert=%.4fs, to_numpy=%.4fs, save=%.4fs)",
+                                scheduler_roundtrip_s,
+                                server_post_total_s,
+                                server_post_convert_s,
+                                server_post_to_numpy_s,
+                                server_post_save_s,
+                            )
+
+                            server_total_s = 0.0
+                            if output_batch.timings is not None:
+                                server_total_s = (
+                                    output_batch.timings.total_duration_ms / 1000.0
+                                )
+                            scheduler_overhead_s = max(
+                                0.0, scheduler_roundtrip_s - server_total_s
+                            )
+
+                            transport = getattr(
+                                output_batch, "client_transport_timings", None
+                            )
+                            if isinstance(transport, dict):
+                                client_send_s = float(
+                                    transport.get("send_pyobj_s", 0.0)
+                                )
+                                client_recv_s = float(
+                                    transport.get("recv_pyobj_s", 0.0)
+                                )
+                            else:
+                                client_send_s = 0.0
+                                client_recv_s = 0.0
+
+                            mem_t = getattr(output_batch, "server_memory_timings", None)
+                            if isinstance(mem_t, dict):
+                                server_mem_total_s = float(
+                                    mem_t.get("mem_total_s", 0.0)
+                                )
+                                server_peak_query_s = float(
+                                    mem_t.get("peak_query_s", 0.0)
+                                )
+                                server_can_stay_s = float(
+                                    mem_t.get("can_stay_resident_s", 0.0)
+                                )
+                            else:
+                                server_mem_total_s = 0.0
+                                server_peak_query_s = 0.0
+                                server_can_stay_s = 0.0
+
+                            logger.info(
+                                "[TimingBreakdown][Scheduler] server_total=%.4fs, roundtrip_overhead=%.4fs, client_send=%.4fs, client_recv=%.4fs, server_mem_total=%.4fs (peak_query=%.4fs, can_stay=%.4fs)",
+                                server_total_s,
+                                scheduler_overhead_s,
+                                client_send_s,
+                                client_recv_s,
+                                server_mem_total_s,
+                                server_peak_query_s,
+                                server_can_stay_s,
+                            )
+
+                            for output_idx, save_path in enumerate(server_saved_paths):
+                                result_item: dict[str, Any] = {
+                                    "saved_file_path": save_path,
+                                    "samples": None,
+                                    "frames": None,
+                                    "prompts": req.prompt,
+                                    "size": (req.height, req.width, req.num_frames),
+                                    "generation_time": timer.duration,
+                                    "peak_memory_mb": output_batch.peak_memory_mb,
+                                    "client_timings": {
+                                        "scheduler_roundtrip_s": scheduler_roundtrip_s,
+                                        "server_postprocess_total_s": server_post_total_s,
+                                        "server_postprocess_convert_s": server_post_convert_s,
+                                        "server_postprocess_to_numpy_s": server_post_to_numpy_s,
+                                        "server_postprocess_save_s": server_post_save_s,
+                                    },
+                                    "timings": (
+                                        output_batch.timings.to_dict()
+                                        if output_batch.timings
+                                        else {}
+                                    ),
+                                    "trajectory": output_batch.trajectory_latents,
+                                    "trajectory_timesteps": output_batch.trajectory_timesteps,
+                                    "trajectory_decoded": output_batch.trajectory_decoded,
+                                    "prompt_index": output_idx,
+                                }
+                                results.append(result_item)
+                            continue
+
                         logger.error(
                             "Received empty output from scheduler for prompt %d",
                             request_idx + 1,
                         )
                         continue
+
                     for output_idx, sample in enumerate(output_batch.output):
                         num_outputs = len(output_batch.output)
                         post_timings: dict[str, float] = {}
