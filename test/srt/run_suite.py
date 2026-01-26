@@ -7,53 +7,16 @@ import tabulate
 from sglang.test.ci.ci_utils import TestFile, run_unittest_files
 
 # NOTE: please sort the test cases alphabetically by the test file name
+# Most tests have been migrated to test/registered/ and use the CI registry system
 suites = {
-    "per-commit-4-gpu": [
-        TestFile("models/test_qwen3_next_models.py", 350),
-        TestFile("models/test_qwen3_next_models_mtp.py", 500),
-        TestFile("test_gpt_oss_4gpu.py", 300),
-        TestFile("test_multi_instance_release_memory_occupation.py", 64),
-        TestFile("test_pp_single_node.py", 500),
-        TestFile("test_epd_disaggregation.py", 150),
-    ],
-    "per-commit-8-gpu-h200": [
-        TestFile("test_deepseek_v3_basic.py", 275),
-        TestFile("test_deepseek_v3_mtp.py", 275),
-        TestFile("test_disaggregation_hybrid_attention.py", 400),
-        TestFile("models/test_kimi_k2_models.py", 200),
-        TestFile("test_deepseek_v32_basic.py", 360),
-        TestFile("test_deepseek_v32_mtp.py", 360),
-        TestFile("models/test_mimo_models.py", 200),
-    ],
-    "per-commit-8-gpu-h20": [
-        TestFile("quant/test_w4a8_deepseek_v3.py", 520),
-        TestFile("test_disaggregation_different_tp.py", 600),
-        TestFile("test_disaggregation_pp.py", 180),
-        TestFile("test_disaggregation_dp_attention.py", 155),
-    ],
-    "per-commit-4-gpu-b200": [
-        TestFile("test_deepseek_v3_fp4_4gpu.py", 1500),
-        TestFile("test_fp8_blockwise_gemm.py", 280),
-        TestFile("test_gpt_oss_4gpu.py", 300),
-        TestFile("test_nvfp4_gemm.py", 360),
-    ],
-    # "per-commit-8-gpu-b200": [
-    #     TestFile("test_mistral_large3_basic.py", 275),  # Moved to nightly - large model
-    # ],
-    "per-commit-4-gpu-gb200": [
-        TestFile("test_deepseek_v3_cutedsl_4gpu.py", 1800),
-        TestFile("test_disaggregation_aarch64.py", 300),
-    ],
-    "per-commit-4-gpu-deepep": [
-        TestFile("ep/test_deepep_small.py", 531),
-        TestFile("ep/test_mooncake_ep_small.py", 660),
-    ],
-    # Disabled: IBGDA/cudaHostRegister environment issues on 8-GPU runner, see #17175
-    # 4-GPU DeepEP tests provide sufficient coverage
-    # "per-commit-8-gpu-h200-deepep": [
-    #     TestFile("ep/test_deepep_large.py", 563),
-    # ],
-    # quantization_test suite migrated to test/registered/quant/
+    # CUDA 4-GPU and 8-GPU tests have been migrated to test/registered/ and are now
+    # managed by test/run_suite.py using the registry system with stage-c suites:
+    # - stage-c-test-4-gpu-h100 (was per-commit-4-gpu)
+    # - stage-c-test-8-gpu-h200 (was per-commit-8-gpu-h200)
+    # - stage-c-test-8-gpu-h20 (was per-commit-8-gpu-h20)
+    # - stage-c-test-4-gpu-b200 (was per-commit-4-gpu-b200)
+    # - stage-c-test-4-gpu-gb200 (was per-commit-4-gpu-gb200)
+    # - stage-c-test-deepep-4-gpu (was per-commit-4-gpu-deepep)
     "__not_in_ci__": [
         TestFile("test_release_memory_occupation.py", 200),  # Temporarily disabled
         TestFile("models/test_dummy_grok_models.py"),
