@@ -29,6 +29,7 @@ PER_COMMIT_SUITES = {
         "stage-b-test-large-2-gpu-performance-amd",
         "stage-b-test-small-1-gpu-accuracy-amd",
         "stage-b-test-large-2-gpu-accuracy-amd",
+        "stage-c-test-large-4-gpu-amd",
         "stage-c-test-large-8-gpu-amd",
         "stage-c-test-large-8-gpu-amd-mi35x",
     ],
