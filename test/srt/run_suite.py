@@ -9,25 +9,8 @@ from sglang.test.ci.ci_utils import TestFile, run_unittest_files
 # NOTE: please sort the test cases alphabetically by the test file name
 # Most tests have been migrated to test/registered/ and use the CI registry system
 suites = {
-    # CUDA 4-GPU and 8-GPU tests have been migrated to test/registered/ and are now
-    # managed by test/run_suite.py using the registry system with stage-c suites:
-    # - stage-c-test-4-gpu-h100 (was per-commit-4-gpu)
-    # - stage-c-test-8-gpu-h200 (was per-commit-8-gpu-h200)
-    # - stage-c-test-8-gpu-h20 (was per-commit-8-gpu-h20)
-    # - stage-c-test-4-gpu-b200 (was per-commit-4-gpu-b200)
-    # - stage-c-test-4-gpu-gb200 (was per-commit-4-gpu-gb200)
-    # - stage-c-test-deepep-4-gpu (was per-commit-4-gpu-deepep)
-    "__not_in_ci__": [
-        TestFile("test_release_memory_occupation.py", 200),  # Temporarily disabled
-        TestFile("models/test_dummy_grok_models.py"),
-        TestFile("test_profile_v2.py"),
-        TestFile("models/test_ministral3_models.py"),
-        TestFile("test_prefill_delayer.py"),
-        TestFile("test_fla_layernorm_guard.py"),
-        TestFile(
-            "models/test_qwen3_next_models_pcg.py"
-        ),  # Disabled: intermittent failures, see #17039
-    ],
+    # All CUDA tests have been migrated to test/registered/ and are now
+    # managed by test/run_suite.py using the CI registry system.
 }
 
 # Add AMD tests
