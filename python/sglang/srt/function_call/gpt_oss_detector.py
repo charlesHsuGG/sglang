@@ -35,7 +35,7 @@ class GptOssDetector(BaseFormatDetector):
     def __init__(self):
         super().__init__()
         self.harmony_parser = HarmonyParser()
-        self.bot_token = "<|start|>assistant<|channel|>commentary"
+        self.bot_token = "<|channel|>commentary"
         self.eot_token = "<|call|>"
 
         # Pattern to extract function name and JSON from tool_call event content
@@ -115,7 +115,7 @@ class GptOssDetector(BaseFormatDetector):
 
         # Quick check if we might have tool calls
         if (
-            "<|channel|>commentary to=" not in self._buffer
+            "<|channel|>commentary to=" not in self._buffer and "<|start|>assistant to=" not in self._buffer
             and not self.current_tool_name_sent
         ):
             # No tool calls detected, check for final content
@@ -135,6 +135,7 @@ class GptOssDetector(BaseFormatDetector):
             normal_text = "".join(
                 [e.content for e in events if e.event_type == "normal"]
             )
+            logger.info(f"events: {events}")
             if normal_text or events:
                 self._buffer = ""
                 return StreamingParseResult(normal_text=normal_text, calls=[])
@@ -160,7 +161,9 @@ class GptOssDetector(BaseFormatDetector):
                     event.raw_text if event.raw_text else event.content,
                     self._tool_indices,
                     self.current_tool_id if self.current_tool_id >= 0 else 0,
+                    tools
                 )
+                logger.info(f"tool_call_info: {tool_call_info}")
 
                 if tool_call_info:
                     # Initialize state if first tool
@@ -203,7 +206,7 @@ class GptOssDetector(BaseFormatDetector):
         return StreamingParseResult(normal_text=normal_text, calls=calls)
 
     def _extract_tool_call_from_event(
-        self, content: str, tool_indices: dict, tool_index: int
+        self, content: str, tool_indices: dict, tool_index: int, tools: List[Tool]
     ) -> Optional[ToolCallItem]:
         """
         Extract tool call information from HarmonyParser event content.
