@@ -1324,6 +1324,7 @@ jobs:
     env:
       SGLANG_CI_RDMA_ALL_DEVICES: "mlx5_1,mlx5_2,mlx5_3,mlx5_4"
       RUNNER_LABELS: 8-gpu-h20
+      SGLANG_ENABLE_JIT_DEEPGEMM: "false"
     strategy:
       fail-fast: false
       matrix:
@@ -1377,6 +1378,7 @@ jobs:
     timeout-minutes: 240
     env:
       RUNNER_LABELS: 4-gpu-h100
+      SGLANG_ENABLE_JIT_DEEPGEMM: "false"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -1426,6 +1428,7 @@ jobs:
     timeout-minutes: 240
     env:
       RUNNER_LABELS: 8-gpu-h200
+      SGLANG_ENABLE_JIT_DEEPGEMM: "false"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
