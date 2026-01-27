@@ -664,6 +664,11 @@ class OpenAIServingChat(OpenAIServingBase):
                         created=int(time.time()),
                         choices=[choice_data],
                         model=request.model,
+                        prompt_token_ids=(
+                            adapted_request.input_ids
+                            if request.return_token_ids
+                            else None
+                        ),
                     )
                     yield f"data: {chunk.model_dump_json()}\n\n"
 
@@ -681,6 +686,7 @@ class OpenAIServingChat(OpenAIServingBase):
                             index=index,
                             delta=DeltaMessage(reasoning_content=reasoning_text),
                             finish_reason=None,
+                            token_ids=content['output_ids'] if request.return_token_ids else None,
                         )
                         chunk = ChatCompletionStreamResponse(
                             id=content["meta_info"]["id"],
@@ -742,6 +748,7 @@ class OpenAIServingChat(OpenAIServingBase):
                             created=int(time.time()),
                             choices=[choice_data],
                             model=request.model,
+                            token_ids=content['output_ids'] if request.return_token_ids else None,
                         )
 
                         # Add usage stats if continuous_usage_stats is enabled
@@ -879,7 +886,7 @@ class OpenAIServingChat(OpenAIServingBase):
             ret,
             int(time.time()),
         )
-
+        response.prompt_token_ids = adapted_request.input_ids if request.return_token_ids else None
         return response
 
     def _build_chat_response(
@@ -963,6 +970,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 sgl_ext=(
                     SglExt(routed_experts=routed_experts) if routed_experts else None
                 ),
+                token_ids=ret_item['output_ids'] if request.return_token_ids else None,
             )
             choices.append(choice_data)
 

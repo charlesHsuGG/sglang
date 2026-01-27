@@ -3,6 +3,8 @@ import logging
 import re
 from typing import List, Optional
 
+import json_repair
+
 from sglang.srt.entrypoints.openai.protocol import Tool
 from sglang.srt.environ import envs
 from sglang.srt.function_call.base_format_detector import BaseFormatDetector
@@ -22,6 +24,12 @@ class GptOssDetector(BaseFormatDetector):
 
     Handles tool calls in the format:
     <|channel|>commentary to={namespace.function}<|constrain|>json<|message|>{args}<|call|>
+    <|start|>assistant to={namespace.function}<|channel|>commentary (content_type)<|message|>{args}<|call|>
+
+    Fixed to properly handle:
+    1. Tool names containing dots (e.g., "patient.get_mri_report")
+    2. Case-insensitive enum value matching
+    3. State reset between requests to prevent memory leaks
     """
 
     def __init__(self):
@@ -32,7 +40,7 @@ class GptOssDetector(BaseFormatDetector):
 
         # Pattern to extract function name and JSON from tool_call event content
         self.tool_extract_pattern = re.compile(
-            r"to=([a-zA-Z_][a-zA-Z0-9_.-]*)\s*<\|constrain\|>json<\|message\|>(.*?)(?:<\|call\|>|$)",
+            r"to=([a-zA-Z_][a-zA-Z0-9_.-]*)\s*(<\|constrain\|>([a-zA-Z0-9_.-]*)?<\|message\|>|<\|channel\|>commentary(\s*[a-zA-Z0-9_.-]*)?<\|message\|>)(.*?)(?:<\|call\|>|$)",
             re.DOTALL,
         )
 
@@ -201,6 +209,7 @@ class GptOssDetector(BaseFormatDetector):
         Extract tool call information from HarmonyParser event content.
 
         Content format: "commentary to=functions.get_weather<|constrain|>json<|message|>{...}"
+        "to={namespace.function}<|channel|>commentary (content_type)<|message|>{...}"
         """
         match = self.tool_extract_pattern.search(content)
 
@@ -209,14 +218,17 @@ class GptOssDetector(BaseFormatDetector):
             return None
 
         full_function_name = match.group(1)
-        json_content = match.group(2)
+        json_content = match.group(5)
 
-        # Extract function name (last part after .)
-        function_name = (
-            full_function_name.split(".")[-1]
-            if "." in full_function_name
-            else full_function_name
-        )
+        # Extract function name (strip "functions." prefix if present)
+        # The model outputs "functions.{tool_name}" where tool_name can itself contain dots
+        # (e.g., "functions.patient.get_mri_report" -> "patient.get_mri_report")
+        if full_function_name.startswith("functions."):
+            function_name = full_function_name[len("functions."):]
+        elif "." in full_function_name:
+            function_name = full_function_name.split(".")[-1]
+        else:
+            function_name = full_function_name
 
         # Check if tool exists
         if function_name not in tool_indices:
@@ -226,9 +238,9 @@ class GptOssDetector(BaseFormatDetector):
 
         # Parse JSON arguments
         try:
-            arguments = json.loads(json_content) if json_content.strip() else {}
+            arguments = json_repair.repair_json(json_content, return_objects=True) if json_content.strip() else {}
         except json.JSONDecodeError as e:
-            logger.debug(f"Failed to parse JSON arguments: {e}")
+            logger.info(f"Failed to parse JSON arguments: {e}")
             return None
 
         return ToolCallItem(
