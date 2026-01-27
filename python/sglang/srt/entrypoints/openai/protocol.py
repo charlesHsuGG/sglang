@@ -896,6 +896,9 @@ class ChatCompletionStreamResponse(BaseModel):
             data.pop("sglext", None)
         return data
 
+    # not part of the OpenAI spec but for tracing the tokens
+    prompt_token_ids: list[int] | None = None
+
 
 class MultimodalEmbeddingInput(BaseModel):
     text: Optional[str] = None
