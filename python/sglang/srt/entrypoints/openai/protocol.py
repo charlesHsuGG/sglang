@@ -886,15 +886,15 @@ class ChatCompletionStreamResponse(BaseModel):
     usage: Optional[UsageInfo] = None
     sglext: Optional[SglExt] = None
 
+    # not part of the OpenAI spec but for tracing the tokens
+    prompt_token_ids: list[int] | None = None
+
     @model_serializer(mode="wrap")
     def _serialize(self, handler):
         data = handler(self)
         if self.sglext is None:
             data.pop("sglext", None)
         return data
-
-    # not part of the OpenAI spec but for tracing the tokens
-    prompt_token_ids: list[int] | None = None
 
 
 class MultimodalEmbeddingInput(BaseModel):
