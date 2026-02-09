@@ -846,9 +846,6 @@ class ChatCompletionResponse(BaseModel):
             data.pop("sglext", None)
         return data
 
-    # vLLM-specific fields that are not in OpenAI spec
-    prompt_token_ids: list[int] | None = None
-
 
 class DeltaMessage(BaseModel):
     role: Optional[str] = None
@@ -898,9 +895,6 @@ class ChatCompletionStreamResponse(BaseModel):
         if self.sglext is None:
             data.pop("sglext", None)
         return data
-
-    # not part of the OpenAI spec but for tracing the tokens
-    prompt_token_ids: list[int] | None = None
 
 
 class MultimodalEmbeddingInput(BaseModel):
