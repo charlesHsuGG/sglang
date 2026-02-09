@@ -537,6 +537,17 @@ class ChatCompletionRequest(BaseModel):
     # For data parallel rank routing
     data_parallel_rank: Optional[int] = None
 
+    return_token_ids: bool | None = Field(
+        default=True,
+        description=(
+            "If specified, the result will include token IDs alongside the "
+            "generated text. In streaming mode, prompt_token_ids is included "
+            "only in the first chunk, and token_ids contains the delta tokens "
+            "for each chunk. This is useful for debugging or when you "
+            "need to map generated text back to input tokens."
+        ),
+    )
+
     # OpenAI/SGLang default sampling parameters
     _DEFAULT_SAMPLING_PARAMS = {
         "temperature": 1.0,
@@ -714,6 +725,10 @@ class ChatCompletionResponseChoice(BaseModel):
     matched_stop: Union[None, int, str] = None
     hidden_states: Optional[object] = None
 
+    # not part of the OpenAI spec but is useful for tracing the tokens
+    # in agent scenarios
+    token_ids: list[int] | None = None
+
     @model_serializer(mode="wrap")
     def _serialize(self, handler):
         data = handler(self)
@@ -730,6 +745,9 @@ class ChatCompletionResponse(BaseModel):
     choices: List[ChatCompletionResponseChoice]
     usage: UsageInfo
     metadata: Optional[Dict[str, Any]] = None
+
+    # vLLM-specific fields that are not in OpenAI spec
+    prompt_token_ids: list[int] | None = None
 
 
 class DeltaMessage(BaseModel):
@@ -758,6 +776,9 @@ class ChatCompletionResponseStreamChoice(BaseModel):
     ] = None
     matched_stop: Union[None, int, str] = None
 
+    # not part of the OpenAI spec but for tracing the tokens
+    token_ids: list[int] | None = None
+
 
 class ChatCompletionStreamResponse(BaseModel):
     id: str
@@ -766,6 +787,9 @@ class ChatCompletionStreamResponse(BaseModel):
     model: str
     choices: List[ChatCompletionResponseStreamChoice]
     usage: Optional[UsageInfo] = None
+
+    # not part of the OpenAI spec but for tracing the tokens
+    prompt_token_ids: list[int] | None = None
 
 
 class MultimodalEmbeddingInput(BaseModel):
