@@ -34,8 +34,8 @@ jobs:
     steps:
       - name: clean up
         run: |
-          sudo chown -R $(id -u):$(id -g) ${{ github.workspace }} || true
-          sudo rm -rf ${{ github.workspace }}/*
+          sudo rm -rf ${{ github.workspace }}/.[!.]* || true
+          sudo rm -rf ${{ github.workspace }}/* || true
       - name: Checkout code
         uses: actions/checkout@v4
         with:
