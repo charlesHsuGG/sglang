@@ -40,6 +40,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
+          clean: false
           ref: ${{ inputs.ref || github.ref }}
 
       - name: Determine run mode
