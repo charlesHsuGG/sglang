@@ -268,9 +268,9 @@ class NGRAMWorker:
         set_time_batch(batch.reqs, "set_spec_draft_end_time", trace_only=True)
 
         spec_info = batch.spec_info
-        num_accepted_drafts = 0
+        num_correct_drafts = 0
         accept_lens = None
-        num_accepted_drafts_per_req_cpu = None
+        num_correct_drafts_per_req_cpu = None
 
         if batch.forward_mode.is_target_verify():
             if batch.has_grammar:
@@ -311,24 +311,27 @@ class NGRAMWorker:
                     # and will be applied to produce wrong results
                     batch.sampling_info.vocab_mask = None
 
-            logits_output, next_token_ids, num_accepted_drafts = verify_input.verify(
+            logits_output, next_token_ids, num_correct_drafts = verify_input.verify(
                 batch, logits_output, self.page_size, vocab_mask
             )
-            num_accepted_drafts_per_req_cpu = (
-                verify_input.num_accepted_drafts.cpu().tolist()
+            num_correct_drafts_per_req_cpu = (
+                verify_input.num_correct_drafts.cpu().tolist()
             )
 
             if get_global_tracing_enabled():
                 for idx, req in enumerate(batch.reqs):
-                    accepted = (
-                        verify_input.num_accepted_drafts[idx].item()
-                        if verify_input.num_accepted_drafts is not None
+                    num_correct_drafts = (
+                        verify_input.num_correct_drafts[idx].item()
+                        if verify_input.num_correct_drafts is not None
                         else 0
                     )
-                    req.time_stats.set_spec_verify_end_time(accepted_tokens=accepted)
+                    req.time_stats.set_spec_verify_end_time(
+                        num_correct_drafts=num_correct_drafts
+                    )
 
-            # Store accept_lens for per-request metrics
-            accept_lens = verify_input.num_accepted_drafts
+            # Store accept_lens (with bonus) for per-request metrics; downstream
+            # subtracts 1 to recover drafts-only counts.
+            accept_lens = verify_input.num_accept_tokens
             if batch.return_logprob:
                 add_output_logprobs_for_spec_v1(batch, verify_input, logits_output)
             self._update_ngram_corpus(batch)
@@ -355,8 +358,8 @@ class NGRAMWorker:
         return GenerationBatchResult(
             logits_output=logits_output,
             next_token_ids=next_token_ids,
-            num_accepted_drafts=num_accepted_drafts,
-            num_accepted_drafts_per_req_cpu=num_accepted_drafts_per_req_cpu,
+            num_correct_drafts=num_correct_drafts,
+            num_correct_drafts_per_req_cpu=num_correct_drafts_per_req_cpu,
             can_run_cuda_graph=can_run_cuda_graph,
             accept_lens=accept_lens,
         )
