@@ -140,6 +140,7 @@ class InitLoadBackParams:
     host_hit_length: int
     mem_quota: Optional[int] = None
     req: Optional[Req] = None
+    best_node: Optional[Any] = None
 
 
 class MatchResult(NamedTuple):
@@ -159,6 +160,9 @@ class MatchResult(NamedTuple):
         mamba_branching_seqlen: The mamba radix cache branching point, which is the longest
                                 page-aligned position that could've been cache hit if there
                                 exists a mamba state.
+        best_node       :   Deepest node accepted by all component validators.
+                            SWA load_back uses it to anchor the sliding-window
+                            walk. None for caches that don't populate it.
     """
 
     device_indices: torch.Tensor
@@ -167,6 +171,7 @@ class MatchResult(NamedTuple):
     host_hit_length: int = 0
     mamba_branching_seqlen: Optional[int] = None
     cache_protected_len: Optional[int] = None
+    best_node: Any = None
 
 
 def zero_match_result(tree_cache, match_result: "MatchResult") -> "MatchResult":

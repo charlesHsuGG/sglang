@@ -106,11 +106,13 @@ def match_prefix_for_req(
         req.last_node,
         req.last_host_node,
         req.host_hit_length,
+        req.best_node,
     ) = (
         match_result.device_indices,
         match_result.last_device_node,
         match_result.last_host_node,
         match_result.host_hit_length,
+        match_result.best_node,
     )
     if match_result.mamba_branching_seqlen is not None:
         req.mamba_branching_seqlen = match_result.mamba_branching_seqlen
@@ -880,6 +882,7 @@ class PrefillAdder:
                         last_host_node=req.last_host_node,
                         host_hit_length=req.host_hit_length,
                         req=req,
+                        best_node=req.best_node,
                     )
                 )
                 req.prefix_indices = torch.cat([req.prefix_indices, new_indices])

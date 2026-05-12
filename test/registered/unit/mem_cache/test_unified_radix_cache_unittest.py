@@ -1808,6 +1808,156 @@ class UnifiedRadixCacheSuite:
             n_swa,
         )
 
+    def _swa_anchor_chain_tokens(self, num_pages: int) -> list[int]:
+        """Reproduce the token sequence used by _build_chain_pages."""
+        tokens: list[int] = []
+        for i in range(num_pages):
+            tokens.extend(self._make_seq(1000 * (i + 1), 1))
+        return tokens
+
+    def _swa_anchor_setup(self):
+        """Build chain[-3]=N, chain[-2]=Y, chain[-1]=X where the FULL-derived
+        `last_host_node` (Y) is strictly shallower than the validator-derived
+        `best_node` (X). Used by both anchor regression tests below.
+
+        Per-node state:
+            N: SWA fully tombstone (cd.value=None, cd.host_value=None),
+               FULL device-on, FULL host removed     → not evicted, not backuped
+            Y: SWA host-only,                          FULL host-only
+               (FULL.value=None, FULL.host_value present) → evicted, backuped
+            X: SWA on device, FULL device-on, FULL host removed
+                                                       → not evicted, not backuped
+
+        Walking FULL state up from X:
+          last_device_node = X (X not evicted)
+          last_host_node   = Y (X not backuped → walk to Y; Y is backuped)
+
+        Walking the SWA validator from root to X:
+          ... → N: SWA both None → state reset to 0, validator False
+          ...   → Y: state = 0 + page_size,  may or may not reach window
+          ...     → X: state = page_size or 2*page_size ≥ window → validator True
+          best_node = X (deepest validator-True node).
+        """
+        if not self.cfg.has_swa:
+            self.skipTest("requires SWA")
+        if self.cfg.has_mamba:
+            self.skipTest("SWA-only path keeps the chain construction simple")
+        ps = self.cfg.page_size
+        sw = self.cfg.sliding_window_size
+        window_pages = (sw + ps - 1) // ps
+        # Need at least N (one page beyond the window) + Y + X.
+        chain_pages = window_pages + 3
+        if chain_pages * ps > self.cfg.kv_size // 2:
+            self.skipTest("kv_size too small for the desired chain")
+
+        tree, allocator, req_to_token_pool = build_fixture(self.cfg)
+        chain = self._build_chain_pages(tree, allocator, req_to_token_pool, chain_pages)
+        if len(chain) < 3:
+            self.skipTest("chain too short for N/Y/X")
+        # Populate host_value on every chain node before tombstoning.
+        self._simulate_backup_tree(tree)
+
+        x = chain[-1]
+        y = chain[-2]
+        n = chain[-3]
+
+        n.component_data[ComponentType.SWA].value = None
+        n.component_data[ComponentType.SWA].host_value = None
+        n.component_data[ComponentType.FULL].host_value = None
+
+        y.component_data[ComponentType.FULL].value = None
+        y.component_data[ComponentType.SWA].value = None
+
+        x.component_data[ComponentType.FULL].host_value = None
+        x.component_data[ComponentType.SWA].host_value = None
+
+        tokens = self._swa_anchor_chain_tokens(len(chain))
+        return tree, chain, n, y, x, tokens
+
+    def test_hicache_swa_match_prefix_picks_best_node_above_last_host(self):
+        """match_prefix returns best_node = X even when last_host_node = Y
+        is a strictly shallower ancestor — this is the structural condition
+        the anchor fix relies on.
+        """
+        tree, _, _, y, x, tokens = self._swa_anchor_setup()
+
+        result = tree.match_prefix(MatchPrefixParams(key=RadixKey(tokens)))
+        self.assertIs(result.best_node, x)
+        self.assertIs(result.last_device_node, x)
+        self.assertIs(result.last_host_node, y)
+
+    def test_hicache_swa_load_back_anchored_on_best_node(self):
+        """Regression: SWA build_hicache_transfers(LOAD_BACK) must anchor its
+        sliding-window reverse walk on best_node (X), not last_host_node (Y).
+        Anchoring on Y would walk past best_node and hit the SWA fully-
+        tombstoned ancestor N, tripping the in-loop assert.
+        """
+        tree, _, n, y, x, _ = self._swa_anchor_setup()
+        ps = self.cfg.page_size
+        sw = self.cfg.sliding_window_size
+        swa_comp = tree.components[ComponentType.SWA]
+
+        # Pre-condition: SWA fully tombstone at N is the trap.
+        self.assertIsNone(n.component_data[ComponentType.SWA].value)
+        self.assertIsNone(n.component_data[ComponentType.SWA].host_value)
+
+        # With the anchor fix: build from y but anchored on x → walks X (skip)
+        # → Y (collect host). Stops before reaching N regardless of window
+        # size, because the loop terminates once n_swa ≥ sw or at the root.
+        transfers = swa_comp.build_hicache_transfers(
+            y, CacheTransferPhase.LOAD_BACK, best_node=x
+        )
+        if ps >= sw:
+            # X alone covers the window; no SWA-only-host to load.
+            self.assertIsNone(transfers)
+        else:
+            self.assertIsNotNone(transfers)
+            self.assertEqual(len(transfers), 1)
+            xfer = transfers[0]
+            self.assertEqual(xfer.name, PoolName.SWA)
+            self.assertEqual(xfer.nodes_to_load, [y])
+            self.assertEqual(int(xfer.host_indices.numel()), ps)
+            self.assertGreaterEqual(int(xfer.host_indices.numel()) + ps, sw)
+
+        # Without the anchor (legacy behaviour: walk from last_host_node y)
+        # the reverse walk over-reaches into N and asserts. Only meaningful
+        # when the window does not fit within Y alone.
+        if ps < sw:
+            with self.assertRaises(AssertionError):
+                swa_comp.build_hicache_transfers(y, CacheTransferPhase.LOAD_BACK)
+
+    def test_hicache_swa_finalize_anchored_on_best_node(self):
+        """finalize_match_result must also anchor on best_node (X) so that
+        the sentinel decision agrees with what build_hicache_transfers will
+        do; the two must scan the same window.
+        """
+        tree, _, _, y, x, _ = self._swa_anchor_setup()
+        ps = self.cfg.page_size
+        sw = self.cfg.sliding_window_size
+        swa_comp = tree.components[ComponentType.SWA]
+
+        base = MatchResult(
+            device_indices=torch.empty((0,), dtype=torch.int64, device=tree.device),
+            last_device_node=x,
+            last_host_node=y,
+            host_hit_length=0,
+            best_node=x,
+        )
+        result = swa_comp.finalize_match_result(
+            result=base,
+            params=MatchPrefixParams(key=RadixKey(self._make_seq(1, 1))),
+            value_chunks=[],
+            best_value_len=0,
+        )
+        if ps >= sw:
+            # Window is already covered by X (SWA on device) alone — no
+            # SWA-only-host in the scanned window, sentinel stays 0.
+            self.assertEqual(result.host_hit_length, 0)
+        else:
+            # X is SWA-on-device; parent Y is SWA-only-host within window
+            # → sentinel = 1.
+            self.assertEqual(result.host_hit_length, 1)
+
     def test_hicache_swa_temp_lock_does_not_release_restored_tombstone(self):
         """A temporary scheduler lock that skipped a SWA tombstone must not
         release later load-back/request locks after the tombstone is restored.

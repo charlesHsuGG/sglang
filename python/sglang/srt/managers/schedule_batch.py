@@ -742,6 +742,7 @@ class Req(ReqDllmMixin):
         self.extend_logprob_start_len = 0
         self.last_node: Any = None
         self.last_host_node: Any = None
+        self.best_node: Any = None  # match's deepest validator-accepted node
         self.host_hit_length = 0
         # Tokens loaded from storage backend (L3) during prefetch for this request
         self.storage_hit_length = 0
@@ -1043,12 +1044,14 @@ class Req(ReqDllmMixin):
                 self.last_host_node,
                 self.host_hit_length,
                 self.mamba_branching_seqlen,
+                self.best_node,
             ) = (
                 match_result.device_indices,
                 match_result.last_device_node,
                 match_result.last_host_node,
                 match_result.host_hit_length,
                 match_result.mamba_branching_seqlen,
+                match_result.best_node,
             )
             if match_result.cache_protected_len is not None:
                 self.cache_protected_len = match_result.cache_protected_len

@@ -93,9 +93,13 @@ class SWAComponent(TreeComponent):
         value_chunks: list[torch.Tensor],
         best_value_len: int,
     ) -> MatchResult:
+        # Anchor on best_node so the scan matches build_hicache_transfers'
+        # LOAD_BACK walk; last_host_node tracks FULL.backuped only and may
+        # walk past the SWA validator's reset point.
+        anchor = result.best_node or result.last_host_node
         ct = self.component_type
         n_swa = 0
-        node = result.last_host_node
+        node = anchor
         root = self.cache.root_node
         while node is not root and n_swa < self.sliding_window_size:
             cd = node.component_data[ct]
@@ -440,11 +444,18 @@ class SWAComponent(TreeComponent):
             ]
 
         if phase == CacheTransferPhase.LOAD_BACK:
+            # Anchor on best_node (deepest validator-accepted), not the
+            # caller-supplied last_host_node which can walk past an SWA
+            # tombstone the validator reset on.
+            walker = kw.get("best_node") or node
             n_swa = 0
             backed_up: list[torch.Tensor] = []
             nodes: list = []
-            while node is not self.cache.root_node and n_swa < self.sliding_window_size:
-                cd = node.component_data[ct]
+            while (
+                walker is not self.cache.root_node and n_swa < self.sliding_window_size
+            ):
+                cd = walker.component_data[ct]
+                # Held by SWA validator's sliding-window check at match time.
                 assert cd.host_value is not None or cd.value is not None
                 if cd.value is not None:
                     # device exists, skip it
@@ -452,9 +463,9 @@ class SWAComponent(TreeComponent):
                 else:
                     # host only, collect it
                     backed_up.append(cd.host_value)
-                    nodes.append(node)
+                    nodes.append(walker)
                     n_swa += len(cd.host_value)
-                node = node.parent
+                walker = walker.parent
 
             if not backed_up:
                 return None

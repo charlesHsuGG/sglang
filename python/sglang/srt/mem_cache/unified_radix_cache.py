@@ -355,8 +355,8 @@ class UnifiedRadixCache(BasePrefixCache):
         if len(key) == 0:
             return self._empty_match_result
 
-        value, last_node, best_value_len = self._match_prefix_helper(key)
-        return self._match_post_processor(params, value, last_node, best_value_len)
+        value, best_node, best_value_len = self._match_prefix_helper(key)
+        return self._match_post_processor(params, value, best_node, best_value_len)
 
     def insert(self, params: InsertParams) -> InsertResult:
         if self.disable:
@@ -677,10 +677,14 @@ class UnifiedRadixCache(BasePrefixCache):
         self,
         params: MatchPrefixParams,
         value: list[torch.Tensor],
-        last_node: UnifiedTreeNode,
+        best_node: UnifiedTreeNode,
         best_value_len: int,
     ) -> MatchResult:
-        node_update = last_node
+        # `best_node` is the deepest node accepted by every component
+        # validator. `last_device_node` / `last_host_node` walk up from it
+        # using FULL state only and can end up shallower; SWA load_back must
+        # anchor on `best_node` to stay within the validator-protected window.
+        node_update = best_node
         for comp in self._components_tuple:
             if comp.component_type == BASE_COMPONENT_TYPE:
                 continue  # Full uses last_access_time, not LRU
@@ -695,12 +699,12 @@ class UnifiedRadixCache(BasePrefixCache):
             node_update = node_update.parent
 
         # Walk up to find last_device_node
-        last_device_node = last_node
+        last_device_node = best_node
         while last_device_node is not self.root_node and last_device_node.evicted:
             last_device_node = last_device_node.parent
 
         # Walk up to find last_host_node
-        last_host_node = last_node
+        last_host_node = best_node
         while last_host_node is not self.root_node and not last_host_node.backuped:
             last_host_node = last_host_node.parent
 
@@ -713,6 +717,7 @@ class UnifiedRadixCache(BasePrefixCache):
             last_device_node=last_device_node,
             last_host_node=last_host_node,
             host_hit_length=0,
+            best_node=best_node,
         )
 
         for component in self._components_tuple:
@@ -1214,8 +1219,14 @@ class UnifiedRadixCache(BasePrefixCache):
         node: UnifiedTreeNode,
         mem_quota: Optional[int] = None,
         req=None,
+        best_node: Optional[UnifiedTreeNode] = None,
     ) -> Optional[torch.Tensor]:
-        """Load evicted KV data from host back to device (H→D)."""
+        """Load evicted KV data from host back to device (H→D).
+
+        `node` is `last_host_node` and drives the FULL evicted-chain walk.
+        `best_node` is forwarded to aux components (SWA anchors its
+        sliding-window walk on it); falls back to `node` when None.
+        """
         if self.cache_controller is None:
             return None
 
@@ -1238,7 +1249,10 @@ class UnifiedRadixCache(BasePrefixCache):
             if comp.component_type == BASE_COMPONENT_TYPE:
                 continue
             t = comp.build_hicache_transfers(
-                last_hit_node, CacheTransferPhase.LOAD_BACK, req=req
+                last_hit_node,
+                CacheTransferPhase.LOAD_BACK,
+                req=req,
+                best_node=best_node,
             )
             if t:
                 comp_xfers[comp.component_type] = t
@@ -1385,9 +1399,12 @@ class UnifiedRadixCache(BasePrefixCache):
         last_node = params.last_host_node
         mem_quota = params.mem_quota
         req = params.req
+        best_node = params.best_node
 
         if last_node.evicted or params.host_hit_length > 0:
-            loading_values = self.load_back(last_node, mem_quota, req=req)
+            loading_values = self.load_back(
+                last_node, mem_quota, req=req, best_node=best_node
+            )
             if loading_values is not None:
                 logger.debug(
                     "init_load_back success: loaded %d tokens for node %d",
