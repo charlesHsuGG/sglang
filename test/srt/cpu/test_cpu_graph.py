@@ -29,7 +29,7 @@ class TestCPUGraph(CustomTestCase):
             "--batch-size",
             "1",
             "--mem-fraction-static",
-            "0.05",
+            "0.5",
             "--enable-torch-compile",
             "--torch-compile-max-bs",
             "2",
