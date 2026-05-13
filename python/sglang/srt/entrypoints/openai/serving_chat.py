@@ -556,6 +556,11 @@ class OpenAIServingChat(OpenAIServingBase):
                         created=int(time.time()),
                         choices=[choice_data],
                         model=request.model,
+                        prompt_token_ids=(
+                            adapted_request.input_ids
+                            if request.return_token_ids
+                            else None
+                        ),
                     )
                     yield f"data: {chunk.model_dump_json()}\n\n"
 
@@ -565,6 +570,17 @@ class OpenAIServingChat(OpenAIServingBase):
 
                 # Handle reasoning content
                 if self.reasoning_parser and request.separate_reasoning:
+                    if finish_reason_type is not None:
+                        eos_token = None
+                        if isinstance(self.tokenizer_manager.tokenizer.eos_token, str):  # check eos token for string-based tokenizer
+                            eos_token = self.tokenizer_manager.tokenizer.eos_token
+                        else:  # for token ID-based tokenizer, decode the eos token ID to get the string
+                            eos_token_id = self.tokenizer_manager.tokenizer.eos_token_id
+                            if eos_token_id is not None:
+                                eos_token = self.tokenizer_manager.tokenizer.decode(
+                                    [eos_token_id] if isinstance(eos_token_id, int) else eos_token_id
+                                )
+                        delta += (eos_token if eos_token else "")
                     reasoning_text, delta = self._process_reasoning_stream(
                         index, delta, reasoning_parser_dict, content, request
                     )
@@ -573,6 +589,7 @@ class OpenAIServingChat(OpenAIServingBase):
                             index=index,
                             delta=DeltaMessage(reasoning_content=reasoning_text),
                             finish_reason=None,
+                            token_ids=content['output_ids'] if request.return_token_ids else None,
                         )
                         chunk = ChatCompletionStreamResponse(
                             id=content["meta_info"]["id"],
@@ -634,6 +651,7 @@ class OpenAIServingChat(OpenAIServingBase):
                             created=int(time.time()),
                             choices=[choice_data],
                             model=request.model,
+                            token_ids=content['output_ids'] if request.return_token_ids else None,
                         )
 
                         # Add usage stats if continuous_usage_stats is enabled
@@ -750,7 +768,7 @@ class OpenAIServingChat(OpenAIServingBase):
             ret,
             int(time.time()),
         )
-
+        response.prompt_token_ids = adapted_request.input_ids if request.return_token_ids else None
         return response
 
     def _build_chat_response(
@@ -829,6 +847,7 @@ class OpenAIServingChat(OpenAIServingBase):
                     else None
                 ),
                 hidden_states=hidden_states,
+                token_ids=ret_item['output_ids'] if request.return_token_ids else None,
             )
             choices.append(choice_data)
 
