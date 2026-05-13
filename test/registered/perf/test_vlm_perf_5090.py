@@ -14,7 +14,15 @@ from sglang.test.test_utils import (
 )
 
 register_cuda_ci(est_time=406, suite="stage-b-test-1-gpu-small")
-register_amd_ci(est_time=500, suite="stage-b-test-1-gpu-small-amd")
+register_amd_ci(
+    est_time=500,
+    suite="stage-b-test-1-gpu-small-amd",
+    disabled=(
+        "Times out at 1800s on MI300 because aiter has no tuned bf16 GEMM configs "
+        "for this VLM's shapes and falls back to torch (~10x slower). "
+        "Re-enable once aiter tuned configs cover Qwen2.5-VL-3B."
+    ),
+)
 
 
 class TestVLMPerf5090(CustomTestCase):
