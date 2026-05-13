@@ -76,6 +76,9 @@ class _StreamChoice(msgspec.Struct):
     finish_reason: Optional[str] = None
     matched_stop: Union[None, int, str] = None
 
+    # not part of the OpenAI spec but for tracing the tokens
+    token_ids: list[int] | None = None
+
 
 class _StreamChunk(msgspec.Struct, omit_defaults=True):
     id: str
@@ -84,6 +87,9 @@ class _StreamChunk(msgspec.Struct, omit_defaults=True):
     model: str
     choices: List[_StreamChoice]
     usage: Optional[dict] = None
+
+    # not part of the OpenAI spec but for tracing the tokens
+    prompt_token_ids: list[int] | None = None
 
 
 _stream_encoder = msgspec.json.Encoder()
@@ -101,6 +107,8 @@ def _fast_sse_content(
     logprobs: Optional[dict] = None,
     matched_stop: Union[None, int, str] = None,
     usage: Optional[dict] = None,
+    prompt_token_ids: Optional[list[int]] = None,
+    token_ids: Optional[list[int]] = None
 ) -> str:
     delta = _StreamDelta(
         role=role, content=content, reasoning_content=reasoning_content
@@ -111,6 +119,7 @@ def _fast_sse_content(
         logprobs=logprobs,
         finish_reason=finish_reason,
         matched_stop=matched_stop,
+        token_ids=token_ids
     )
     chunk = _StreamChunk(
         id=chunk_id,
@@ -119,6 +128,7 @@ def _fast_sse_content(
         model=model,
         choices=[choice],
         usage=usage,
+        prompt_token_ids=prompt_token_ids
     )
     return (_SSE_DATA_B + _stream_encoder.encode(chunk) + _SSE_NL_B).decode()
 
@@ -861,6 +871,11 @@ class OpenAIServingChat(OpenAIServingBase):
                             index=index,
                             reasoning_content=reasoning_text,
                             usage=usage,
+                            prompt_token_ids=(
+                                adapted_request.input_ids
+                                if request.return_token_ids
+                                else None
+                            ),
                         )
 
                 # Handle tool calls
@@ -928,6 +943,7 @@ class OpenAIServingChat(OpenAIServingBase):
                     index=idx,
                     finish_reason=final_finish_reason,
                     matched_stop=matched_stop,
+                    token_ids=content['output_ids'] if request.return_token_ids else None
                 )
 
             # Send hidden states if requested
@@ -1019,7 +1035,7 @@ class OpenAIServingChat(OpenAIServingBase):
             ret,
             int(time.time()),
         )
-
+        response.prompt_token_ids = adapted_request.input_ids if request.return_token_ids else None
         return response
 
     def _build_chat_response(
@@ -1112,6 +1128,7 @@ class OpenAIServingChat(OpenAIServingBase):
                     else None
                 ),
                 hidden_states=hidden_states,
+                token_ids=ret_item['output_ids'] if request.return_token_ids else None,
             )
             choices.append(choice_data)
 
