@@ -1,0 +1,46 @@
+name: Setup CUDA Test Stage
+description: >-
+  Boilerplate run at the start of every CUDA test stage in pr-test.yml:
+  checkout the PR ref, run the stage-health and maintenance gates, and
+  download the sgl-kernel wheel artifact (when the PR has kernel changes).
+  B200 stages use actions/download-artifact@v6; all others use @v4.
+inputs:
+  sgl_kernel:
+    description: 'check-changes.outputs.sgl_kernel value ("true" or "false").'
+    required: true
+  download_artifact_version:
+    description: 'actions/download-artifact major version. "v4" by default; "v6" for B200 stages.'
+    default: 'v4'
+  pr_head_sha:
+    description: 'PR head SHA to check out (forwarded from caller workflow inputs).'
+    default: ''
+  git_ref:
+    description: 'Git ref to check out (forwarded from caller workflow inputs).'
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.pr_head_sha || inputs.git_ref || github.sha }}
+
+    - uses: ./.github/actions/check-stage-health
+
+    - uses: ./.github/actions/check-maintenance
+
+    - name: Download artifacts (v4)
+      if: ${{ inputs.sgl_kernel == 'true' && inputs.download_artifact_version == 'v4' }}
+      uses: actions/download-artifact@v4
+      with:
+        path: sgl-kernel/dist/
+        merge-multiple: true
+        pattern: wheel-python3.10-cuda*
+
+    - name: Download artifacts (v6)
+      if: ${{ inputs.sgl_kernel == 'true' && inputs.download_artifact_version == 'v6' }}
+      uses: actions/download-artifact@v6
+      with:
+        path: sgl-kernel/dist/
+        merge-multiple: true
+        pattern: wheel-python3.10-cuda*
