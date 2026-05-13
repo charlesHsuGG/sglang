@@ -1,9 +1,11 @@
 name: Setup CUDA Test Stage
 description: >-
   Boilerplate run at the start of every CUDA test stage in pr-test.yml:
-  checkout the PR ref, run the stage-health and maintenance gates, and
-  download the sgl-kernel wheel artifact (when the PR has kernel changes).
-  B200 stages use actions/download-artifact@v6; all others use @v4.
+  checkout the PR ref, run the stage-health and maintenance gates, download
+  the sgl-kernel wheel artifact (when the PR has kernel changes), and install
+  the CUDA dependencies. B200 stages use actions/download-artifact@v6; all
+  others use @v4. The install script and per-step timeout are stage-tunable
+  via inputs.
 inputs:
   sgl_kernel:
     description: 'check-changes.outputs.sgl_kernel value ("true" or "false").'
@@ -11,6 +13,19 @@ inputs:
   download_artifact_version:
     description: 'actions/download-artifact major version. "v4" by default; "v6" for B200 stages.'
     default: 'v4'
+  install_script:
+    description: >-
+      Path to the install script. Default installs base CUDA deps; deepep
+      and dsv4 stages override with their specialised scripts.
+    default: 'scripts/ci/cuda/ci_install_dependency.sh'
+  install_timeout_minutes:
+    description: >-
+      Wall-clock cap (in minutes) for the install step. Composite-action
+      steps cannot use timeout-minutes natively; enforced via bash `timeout`.
+      On timeout, the underlying script receives SIGTERM (then SIGKILL after
+      a short grace period), the same signal pair GitHub Actions uses for
+      its native step timeout.
+    default: '20'
   pr_head_sha:
     description: 'PR head SHA to check out (forwarded from caller workflow inputs).'
     default: ''
@@ -44,3 +59,10 @@ runs:
         path: sgl-kernel/dist/
         merge-multiple: true
         pattern: wheel-python3.10-cuda*
+
+    - name: Install dependencies
+      shell: bash
+      env:
+        CUSTOM_BUILD_SGL_KERNEL: ${{ inputs.sgl_kernel }}
+      run: |
+        timeout ${{ inputs.install_timeout_minutes }}m bash ${{ inputs.install_script }}
