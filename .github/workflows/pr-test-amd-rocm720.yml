@@ -68,6 +68,11 @@ on:
         required: false
         type: boolean
         default: true
+      run_all_tests:
+        description: 'Run all tests (skip change detection). Use this when target_stage is empty and you still want every job to run.'
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       ref:
