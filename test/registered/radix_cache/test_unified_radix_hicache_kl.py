@@ -6,6 +6,8 @@ under UnifiedRadixTree, verifying multi-turn cache correctness via KL divergence
 
 import unittest
 
+from test_unified_radix_cache_kl import UnifiedRadixTreeTestMixin
+
 from sglang.srt.utils import kill_process_tree
 from sglang.test.ci.ci_register import register_cuda_ci
 from sglang.test.kl_multiturn_utils import (
@@ -19,8 +21,6 @@ from sglang.test.test_utils import (
     CustomTestCase,
     popen_launch_server,
 )
-from test_unified_radix_cache_kl import UnifiedRadixTreeTestMixin
-
 
 MAMBA_MODEL = "Qwen/Qwen3-Next-80B-A3B-Instruct"
 MAMBA_CHUNK_SIZE = 64
