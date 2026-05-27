@@ -912,6 +912,7 @@ class ChatCompletionResponse(BaseModel):
 
     # vLLM-specific fields that are not in OpenAI spec
     prompt_token_ids: list[int] | None = None
+    prompt_logprobs: Optional[Union[LogProbs, ChoiceLogprobs]] = None
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler):
@@ -962,6 +963,7 @@ class ChatCompletionStreamResponse(BaseModel):
 
     # not part of the OpenAI spec but for tracing the tokens
     prompt_token_ids: list[int] | None = None
+    prompt_logprobs: Optional[Union[LogProbs, ChoiceLogprobs]] = None
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler):

@@ -90,6 +90,7 @@ class _StreamChunk(msgspec.Struct, omit_defaults=True):
 
     # not part of the OpenAI spec but for tracing the tokens
     prompt_token_ids: list[int] | None = None
+    prompt_logprobs: Optional[Union[LogProbs, ChoiceLogprobs]] = None
 
 
 _stream_encoder = msgspec.json.Encoder()
@@ -107,8 +108,9 @@ def _fast_sse_content(
     logprobs: Optional[dict] = None,
     matched_stop: Union[None, int, str] = None,
     usage: Optional[dict] = None,
+    token_ids: Optional[list[int]] = None,
     prompt_token_ids: Optional[list[int]] = None,
-    token_ids: Optional[list[int]] = None
+    prompt_logprobs: Optional[ChoiceLogprobs] = None
 ) -> str:
     delta = _StreamDelta(
         role=role, content=content, reasoning_content=reasoning_content
@@ -128,7 +130,8 @@ def _fast_sse_content(
         model=model,
         choices=[choice],
         usage=usage,
-        prompt_token_ids=prompt_token_ids
+        prompt_token_ids=prompt_token_ids,
+        prompt_logprobs=prompt_logprobs
     )
     return (_SSE_DATA_B + _stream_encoder.encode(chunk) + _SSE_NL_B).decode()
 
@@ -604,7 +607,7 @@ class OpenAIServingChat(OpenAIServingBase):
                     return_dict=False,
                     **extra_template_kwargs,
                 )
-            except Exception as e:
+            except Exception:
                 # If the first attempt fails, try with flat function-only format.
                 # Some templates (e.g. Mistral) expect tools without the OpenAI wrapper.
                 tools = (
@@ -864,6 +867,16 @@ class OpenAIServingChat(OpenAIServingBase):
                                 completion_tokens=completion_tokens.get(index, 0),
                             ).model_dump()
 
+                        prompt_logprobs = None
+                        if request.logprobs:
+                            input_token_logprobs = content["meta_info"]["input_token_logprobs"]
+                            input_top_logprobs = content["meta_info"].get("input_top_logprobs", [])
+                            logprobs = to_openai_style_logprobs(
+                                input_token_logprobs=input_token_logprobs, input_top_logprobs=input_top_logprobs,
+                            )
+
+                            token_logprobs = self._process_logprobs_tokens(logprobs, use_token_index=False)
+                            prompt_logprobs = ChoiceLogprobs(content=token_logprobs)
                         yield _fast_sse_content(
                             chunk_id=content["meta_info"]["id"],
                             created=int(time.time()),
@@ -876,6 +889,7 @@ class OpenAIServingChat(OpenAIServingBase):
                                 if request.return_token_ids
                                 else None
                             ),
+                            prompt_logprobs=prompt_logprobs
                         )
 
                 # Handle tool calls
@@ -1021,7 +1035,7 @@ class OpenAIServingChat(OpenAIServingBase):
     ) -> Union[ChatCompletionResponse, ErrorResponse, ORJSONResponse]:
         """Handle non-streaming chat completion request"""
         try:
-            ret = await self.tokenizer_manager.generate_request(
+            ret = await self.tokenizer_manager.generate_request(  # pylint: disable=unnecessary-dunder-call
                 adapted_request, raw_request
             ).__anext__()
         except ValueError as e:
@@ -1034,8 +1048,8 @@ class OpenAIServingChat(OpenAIServingBase):
             request,
             ret,
             int(time.time()),
+            prompt_input_ids=adapted_request.input_ids if request.return_token_ids else None
         )
-        response.prompt_token_ids = adapted_request.input_ids if request.return_token_ids else None
         return response
 
     def _build_chat_response(
@@ -1043,6 +1057,7 @@ class OpenAIServingChat(OpenAIServingBase):
         request: ChatCompletionRequest,
         ret: List[Dict[str, Any]],
         created: int,
+        prompt_input_ids: Optional[Union[List[List[int]], List[int]]] = None
     ) -> Union[ChatCompletionResponse, ORJSONResponse]:
         """Build chat completion response from generation results"""
         choices = []
@@ -1138,7 +1153,7 @@ class OpenAIServingChat(OpenAIServingBase):
             n_choices=request.n,
             enable_cache_report=self.tokenizer_manager.server_args.enable_cache_report,
         )
-
+        
         return ChatCompletionResponse(
             id=ret[0]["meta_info"]["id"],
             created=created,
@@ -1147,6 +1162,8 @@ class OpenAIServingChat(OpenAIServingBase):
             usage=usage,
             metadata={"weight_version": ret[0]["meta_info"]["weight_version"]},
             sglext=response_sglext,
+            prompt_token_ids=prompt_input_ids,
+            prompt_logprobs=self._process_input_logprobs(ret[0]) if request.logprobs else None
         )
 
     def _process_logprobs_tokens(
@@ -1191,6 +1208,16 @@ class OpenAIServingChat(OpenAIServingBase):
 
         return token_logprobs
 
+    def _process_input_logprobs(self, ret_item: Dict[str, Any]) -> ChoiceLogprobs:
+        """Process logprobs for non-streaming input prompt"""
+        logprobs = to_openai_style_logprobs(
+            output_token_logprobs=ret_item["meta_info"]["input_token_logprobs"],
+            output_top_logprobs=ret_item["meta_info"].get("input_top_logprobs", None),
+        )
+
+        token_logprobs = self._process_logprobs_tokens(logprobs, use_token_index=True)
+        return ChoiceLogprobs(content=token_logprobs)
+
     def _process_response_logprobs(self, ret_item: Dict[str, Any]) -> ChoiceLogprobs:
         """Process logprobs for non-streaming response"""
         logprobs = to_openai_style_logprobs(
@@ -1215,7 +1242,7 @@ class OpenAIServingChat(OpenAIServingBase):
             # Align with Kimi-K2 format: functions.{name}:{index}
             # Kimi-K2 allows multiple tool_calls in one message; SGLang sets call_item.tool_index to the *local* position inside that message.
             # Therefore, the index must be corrected by using `history_tool_calls_cnt + call_item.tool_index` to ensure globally unique and properly ordered.
-            tool_call_id = f"functions.{call_item.name}:{history_tool_calls_cnt+call_item.tool_index}"
+            tool_call_id = f"functions.{call_item.name}:{history_tool_calls_cnt + call_item.tool_index}"
             logger.debug(
                 f"Process tool call idx, parser: {self.tool_call_parser}, tool_call_id: {tool_call_id}, history_cnt: {history_tool_calls_cnt}"
             )

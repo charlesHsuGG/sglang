@@ -133,17 +133,29 @@ class SchedulerUpdateWeightsMixin:
         parameter = self.tp_worker.get_weights_by_name(recv_req)
         return GetWeightsByNameReqOutput(parameter)
 
-    def release_memory_occupation(
-        self: Scheduler, recv_req: ReleaseMemoryOccupationReqInput
-    ):
-        assert (
-            self.is_fully_idle()
-        ), "release_memory_occupation should be called only when server is idle."
-
+    def release_memory_occupation(self: Scheduler, recv_req: ReleaseMemoryOccupationReqInput):
+        if not self.is_fully_idle():
+            return ReleaseMemoryOccupationReqOutput(
+                success=False,
+                message=(
+                    "release_memory_occupation called while requests are in flight; "
+                    "drain pending work before releasing GPU memory."
+                ),
+            )
         tags = recv_req.tags
 
         if tags is None or len(tags) == 0:
             tags = GPU_MEMORY_ALL_TYPES
+
+        already_released = [t for t in tags if t in self.offload_tags]
+        if already_released:
+            return ReleaseMemoryOccupationReqOutput(
+                success=False,
+                message=(
+                    f"release_memory_occupation called for tags {already_released} "
+                    "that are already released."
+                ),
+            )
 
         for tag in tags:
             self.offload_tags.add(tag)
@@ -164,15 +176,23 @@ class SchedulerUpdateWeightsMixin:
 
         torch.get_device_module().synchronize()
 
-        return ReleaseMemoryOccupationReqOutput()
+        return ReleaseMemoryOccupationReqOutput(success=True, message="Release memory occupation success.")
 
-    def resume_memory_occupation(
-        self: Scheduler, recv_req: ResumeMemoryOccupationReqInput
-    ):
+    def resume_memory_occupation(self: Scheduler, recv_req: ResumeMemoryOccupationReqInput):
         tags = recv_req.tags
 
         if tags is None or len(tags) == 0:
             tags = GPU_MEMORY_ALL_TYPES
+
+        not_released = [t for t in tags if t not in self.offload_tags]
+        if not_released:
+            return ResumeMemoryOccupationReqOutput(
+                success=False,
+                message=(
+                    f"resume_memory_occupation called for tags {not_released} "
+                    "that are not currently released."
+                ),
+            )
 
         for tag in tags:
             self.offload_tags.remove(tag)
@@ -192,7 +212,7 @@ class SchedulerUpdateWeightsMixin:
         if GPU_MEMORY_TYPE_KV_CACHE in tags:
             self.memory_saver_adapter.resume(GPU_MEMORY_TYPE_KV_CACHE)
 
-        return ResumeMemoryOccupationReqOutput()
+        return ResumeMemoryOccupationReqOutput(success=True, message="Resume memory occupation success.")
 
     def check_weights(self: Scheduler, recv_req: CheckWeightsReqInput):
         try:
