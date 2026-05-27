@@ -90,7 +90,6 @@ class _StreamChunk(msgspec.Struct, omit_defaults=True):
 
     # not part of the OpenAI spec but for tracing the tokens
     prompt_token_ids: list[int] | None = None
-    prompt_logprobs: Optional[Union[LogProbs, ChoiceLogprobs]] = None
 
 
 _stream_encoder = msgspec.json.Encoder()
@@ -110,7 +109,6 @@ def _fast_sse_content(
     usage: Optional[dict] = None,
     token_ids: Optional[list[int]] = None,
     prompt_token_ids: Optional[list[int]] = None,
-    prompt_logprobs: Optional[ChoiceLogprobs] = None
 ) -> str:
     delta = _StreamDelta(
         role=role, content=content, reasoning_content=reasoning_content
@@ -131,7 +129,6 @@ def _fast_sse_content(
         choices=[choice],
         usage=usage,
         prompt_token_ids=prompt_token_ids,
-        prompt_logprobs=prompt_logprobs
     )
     return (_SSE_DATA_B + _stream_encoder.encode(chunk) + _SSE_NL_B).decode()
 
@@ -867,16 +864,6 @@ class OpenAIServingChat(OpenAIServingBase):
                                 completion_tokens=completion_tokens.get(index, 0),
                             ).model_dump()
 
-                        prompt_logprobs = None
-                        if request.logprobs:
-                            input_token_logprobs = content["meta_info"]["input_token_logprobs"]
-                            input_top_logprobs = content["meta_info"].get("input_top_logprobs", [])
-                            logprobs = to_openai_style_logprobs(
-                                input_token_logprobs=input_token_logprobs, input_top_logprobs=input_top_logprobs,
-                            )
-
-                            token_logprobs = self._process_logprobs_tokens(logprobs, use_token_index=False)
-                            prompt_logprobs = ChoiceLogprobs(content=token_logprobs)
                         yield _fast_sse_content(
                             chunk_id=content["meta_info"]["id"],
                             created=int(time.time()),
@@ -889,7 +876,6 @@ class OpenAIServingChat(OpenAIServingBase):
                                 if request.return_token_ids
                                 else None
                             ),
-                            prompt_logprobs=prompt_logprobs
                         )
 
                 # Handle tool calls
@@ -1163,7 +1149,6 @@ class OpenAIServingChat(OpenAIServingBase):
             metadata={"weight_version": ret[0]["meta_info"]["weight_version"]},
             sglext=response_sglext,
             prompt_token_ids=prompt_input_ids,
-            prompt_logprobs=self._process_input_logprobs(ret[0]) if request.logprobs else None
         )
 
     def _process_logprobs_tokens(
@@ -1207,16 +1192,6 @@ class OpenAIServingChat(OpenAIServingBase):
             )
 
         return token_logprobs
-
-    def _process_input_logprobs(self, ret_item: Dict[str, Any]) -> ChoiceLogprobs:
-        """Process logprobs for non-streaming input prompt"""
-        logprobs = to_openai_style_logprobs(
-            output_token_logprobs=ret_item["meta_info"]["input_token_logprobs"],
-            output_top_logprobs=ret_item["meta_info"].get("input_top_logprobs", None),
-        )
-
-        token_logprobs = self._process_logprobs_tokens(logprobs, use_token_index=True)
-        return ChoiceLogprobs(content=token_logprobs)
 
     def _process_response_logprobs(self, ret_item: Dict[str, Any]) -> ChoiceLogprobs:
         """Process logprobs for non-streaming response"""
