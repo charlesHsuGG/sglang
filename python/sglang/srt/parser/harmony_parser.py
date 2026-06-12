@@ -149,7 +149,7 @@ class CanonicalStrategy:
                 # Check if this might be incomplete
                 if pos == len(tokens) - 1:  # Last token
                     emit, hold = prefix_hold(
-                        text[token.start : token.end], self.guard_tokens
+                        text[token.start: token.end], self.guard_tokens
                     )
                     if emit:
                         events.append(Event("normal", emit))
@@ -160,7 +160,7 @@ class CanonicalStrategy:
                         # Skip this filler text - don't emit as normal content
                         pos += 1
                     else:
-                        content = text[token.start : token.end]
+                        content = text[token.start: token.end]
                         # Skip standalone structural tokens that shouldn't be emitted as normal text
                         if not self._is_standalone_structural_token(content):
                             events.append(Event("normal", content))
@@ -191,7 +191,7 @@ class CanonicalStrategy:
                     pos += 1
                 else:
                     # Unexpected token - only emit as text if it's not a standalone structural token
-                    content = text[token.start : token.end]
+                    content = text[token.start: token.end]
                     if not self._is_standalone_structural_token(content):
                         events.append(Event("normal", content))
                     pos += 1
@@ -214,7 +214,8 @@ class CanonicalStrategy:
 
         for i in range(pos, len(tokens)):
             if tokens[i].type == "CHANNEL" and channel_pos is None:
-                channel_pos = i
+                if i + 1 < len(tokens) and tokens[i + 1].type == "TEXT":
+                    channel_pos = i
             elif tokens[i].type == "MESSAGE":
                 message_pos = i
                 break
@@ -240,7 +241,7 @@ class CanonicalStrategy:
         content = text[content_start:]
 
         # Return partial reasoning content and preserve the channel structure for next parse
-        remaining_text = text[tokens[start_pos].start : content_start]
+        remaining_text = text[tokens[start_pos].start: content_start]
         return Event("reasoning", content), remaining_text
 
     def _extract_channel_type(self, header_text: str) -> Optional[str]:
@@ -250,10 +251,10 @@ class CanonicalStrategy:
 
         if header_clean.lower().startswith("analysis"):
             return "analysis"
-        elif header_clean.lower().startswith("commentary"):
-            return "commentary"
         elif header_clean.lower().startswith("final"):
             return "final"
+        elif header_clean.lower().startswith("commentary"):
+            return "commentary"
         else:
             return None  # Unknown channel type
 
@@ -273,7 +274,8 @@ class CanonicalStrategy:
 
         for i in range(pos, len(tokens)):
             if tokens[i].type == "CHANNEL" and channel_pos is None:
-                channel_pos = i
+                if i + 1 < len(tokens) and tokens[i + 1].type == "TEXT":
+                    channel_pos = i
             elif tokens[i].type == "MESSAGE":
                 message_pos = i
                 break
@@ -292,7 +294,7 @@ class CanonicalStrategy:
                     break
             if end_token_pos is None:
                 return None  # Incomplete
-            content = text[content_start : tokens[end_token_pos].start]
+            content = text[content_start: tokens[end_token_pos].start]
             return Event("normal", content), end_token_pos + 1
 
         # Standard channel block processing - message_pos is already found above
@@ -315,13 +317,13 @@ class CanonicalStrategy:
 
         # Each channel type has specific valid end tokens
         if channel_type == "final":
-            while end_pos < len(tokens) and tokens[end_pos].type != "RETURN":
+            while end_pos < len(tokens) and tokens[end_pos].type not in ("END", "RETURN"):
                 end_pos += 1
         elif channel_type == "analysis":
             while end_pos < len(tokens) and tokens[end_pos].type not in ("END", "CALL"):
                 end_pos += 1
         else:  # commentary
-            while end_pos < len(tokens) and tokens[end_pos].type not in ("END", "CALL"):
+            while end_pos < len(tokens) and tokens[end_pos].type not in ("END", "RETURN", "CALL"):
                 end_pos += 1
 
         if end_pos >= len(tokens):
@@ -333,29 +335,27 @@ class CanonicalStrategy:
             return None  # Analysis and commentary need proper end tokens
 
         end_token = tokens[end_pos]
-        content = text[content_start : end_token.start]
+        content = text[content_start: end_token.start]
 
         # Create event based on channel and end token
         if channel_type == "analysis":
             if end_token.type == "CALL":
                 # Built-in tools (browser, python) use analysis channel with <|call|>
-                raw_text = text[tokens[start_pos].start : end_token.end]
+                raw_text = text[tokens[start_pos].start: end_token.end]
                 return Event("tool_call", content.strip(), raw_text), end_pos + 1
-            else:
-                return Event("reasoning", content), end_pos + 1
+            return Event("reasoning", content), end_pos + 1
         elif channel_type == "commentary":
             if end_token.type == "CALL":
-                raw_text = text[tokens[start_pos].start : end_token.end]
+                raw_text = text[tokens[start_pos].start: end_token.end]
                 return Event("tool_call", content.strip(), raw_text), end_pos + 1
-            else:
-                return Event("normal", content), end_pos + 1
+            return Event("normal", content), end_pos + 1
         elif channel_type == "final":
-            # For final blocks, include any trailing TEXT immediately after <|return|>
+            # For final blocks, include any trailing TEXT immediately after <|return|> or <|end|>
             final_content = content
-            if end_token.type == "RETURN" and end_pos + 1 < len(tokens):
+            if end_token.type in ("END", "RETURN") and end_pos + 1 < len(tokens):
                 next_token = tokens[end_pos + 1]
                 if next_token.type == "TEXT":
-                    final_content += text[next_token.start : next_token.end]
+                    final_content += text[next_token.start: next_token.end]
                     return Event("normal", final_content), end_pos + 2
             return Event("normal", final_content), end_pos + 1
 
@@ -366,7 +366,7 @@ class CanonicalStrategy:
     ) -> bool:
         """Check if this is commentary filler text or problematic structural tokens in malformed sequences."""
         current_token = tokens[pos]
-        current_text = text[current_token.start : current_token.end].strip()
+        current_text = text[current_token.start: current_token.end].strip()
 
         # Check for commentary filler between CALL and CHANNEL
         if pos > 0 and pos + 1 < len(tokens):
