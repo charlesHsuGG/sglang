@@ -257,6 +257,9 @@ class Qwen3Detector(BaseReasoningFormatDetector):
             think_excluded_tokens=think_excluded_tokens,
             force_reasoning=force_reasoning,
             stream_reasoning=stream_reasoning,
+            # Qwen3.5 sometimes opens ``<tool_call>`` without closing
+            # ``</think>``; treat it as an implicit reasoning close.
+            tool_start_token="<tool_call>",
             continue_final_message=continue_final_message,
             previous_content=previous_content,
             thinks_internally=True,
@@ -392,17 +395,29 @@ class GptOssDetector(BaseReasoningFormatDetector):
         # Flush the buffer for one-shot parsing
         events += self.parser.parse("")
 
-        reasoning_text = "".join(
-            [e.content for e in events if e.event_type == "reasoning"]
-        )
-        normal_parts = []
+        reasoning_text = "".join([e.content for e in events if e.event_type == "reasoning"])
+
+        normal_parts, tool_call_parts = [], []
         for e in events:
             if e.event_type == "normal":
                 normal_parts.append(e.content)
             elif e.event_type == "tool_call":
                 # Use raw_text to preserve structural markers for function call detector
-                normal_parts.append(e.raw_text if e.raw_text else e.content)
-        normal_text = "".join(normal_parts)
+                tool_call_parts.append(e.raw_text if e.raw_text else e.content)
+        if tool_call_parts:
+            normal_text = tool_call_parts[-1]
+            reasoning_text += ("".join(normal_parts) if normal_parts else "".join(tool_call_parts[:-1]))
+        else:
+            normal_text = normal_parts[-1] if normal_parts else None
+            reasoning_text += "".join(normal_parts[:-1])
+        # normal_parts = []
+        # for e in events:
+        #     if e.event_type == "normal":
+        #         normal_parts.append(e.content)
+        #     elif e.event_type == "tool_call":
+        #         # Use raw_text to preserve structural markers for function call detector
+        #         normal_parts.append(e.raw_text if e.raw_text else e.content)
+        # normal_text = "".join(normal_parts)
         # Tool call events preserve raw text with structural markers
 
         return StreamingParseResult(
@@ -413,17 +428,30 @@ class GptOssDetector(BaseReasoningFormatDetector):
     def parse_streaming_increment(self, new_text: str) -> StreamingParseResult:
         events = self.parser.parse(new_text)
 
-        reasoning_text = "".join(
-            [e.content for e in events if e.event_type == "reasoning"]
-        )
-        normal_parts = []
+        reasoning_text = "".join([e.content for e in events if e.event_type == "reasoning"])
+
+        normal_parts, tool_call_parts = [], []
         for e in events:
             if e.event_type == "normal":
                 normal_parts.append(e.content)
             elif e.event_type == "tool_call":
                 # Use raw_text to preserve structural markers for function call detector
-                normal_parts.append(e.raw_text if e.raw_text else e.content)
-        normal_text = "".join(normal_parts)
+                tool_call_parts.append(e.raw_text if e.raw_text else e.content)
+        if tool_call_parts:
+            normal_text = tool_call_parts[-1]
+            reasoning_text += ("".join(normal_parts) if normal_parts else "".join(tool_call_parts[:-1]))
+        else:
+            normal_text = normal_parts[-1] if normal_parts else None
+            reasoning_text += "".join(normal_parts[:-1])
+
+        # normal_parts = []
+        # for e in events:
+        #     if e.event_type == "normal":
+        #         normal_parts.append(e.content)
+        #     elif e.event_type == "tool_call":
+        #         # Use raw_text to preserve structural markers for function call detector
+        #         normal_parts.append(e.raw_text if e.raw_text else e.content)
+        # normal_text = "".join(normal_parts)
 
         return StreamingParseResult(
             normal_text=normal_text,
