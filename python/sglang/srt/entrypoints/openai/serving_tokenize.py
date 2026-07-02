@@ -35,7 +35,7 @@ class OpenAIServingTokenize(OpenAIServingBase):
     ) -> Union[TokenizeResponse, ErrorResponse]:
         try:
             tokenizer = self.tokenizer_manager.tokenizer
-            max_model_len = getattr(tokenizer, "model_max_length", -1)
+            max_model_len = str(getattr(tokenizer, "model_max_length", -1))
 
             if isinstance(request.prompt, str):
                 token_ids = tokenizer.encode(
