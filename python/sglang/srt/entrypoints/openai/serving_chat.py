@@ -2582,6 +2582,11 @@ class OpenAIServingChat(OpenAIServingBase):
                             and request.separate_reasoning
                             else None
                         ),
+                        prompt_token_ids=(
+                            adapted_request.input_ids
+                            if request.return_token_ids or request.return_prompt_token_ids
+                            else None
+                        )
                     )
                     stream_started = True
 
@@ -2884,6 +2889,7 @@ class OpenAIServingChat(OpenAIServingBase):
 
         prompt_input_ids = None
         encoding_output = self._encoding_output()
+        prompt_input_ids = None
         for idx, ret_item in enumerate(ret):
             # Process logprobs
             choice_logprobs = None
