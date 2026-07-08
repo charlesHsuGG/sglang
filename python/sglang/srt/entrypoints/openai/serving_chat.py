@@ -410,6 +410,7 @@ class OpenAIServingChat(OpenAIServingBase):
                     index=index,
                     reasoning_content=reasoning_text,
                     logprobs=remaining_logprobs,
+                    token_ids=content['output_ids'] if request.return_token_ids else None,
                     usage=usage,
                 )
                 remaining_logprobs = None
@@ -456,6 +457,7 @@ class OpenAIServingChat(OpenAIServingBase):
                     index=index,
                     content=delta,
                     logprobs=remaining_logprobs,
+                    token_ids=content['output_ids'] if request.return_token_ids else None,
                     usage=usage,
                 )
                 remaining_logprobs = None
@@ -1134,6 +1136,11 @@ class OpenAIServingChat(OpenAIServingBase):
                         index=index,
                         role="assistant",
                         content="",
+                        prompt_token_ids=(
+                            adapted_request.input_ids
+                            if request.return_token_ids or request.return_prompt_token_ids
+                            else None
+                        )
                     )
                     stream_started = True
 
@@ -1314,6 +1321,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 cached_tokens_details=cached_tokens_details,
             )
 
+        prompt_input_ids = None
         for idx, ret_item in enumerate(ret):
             # Process logprobs
             choice_logprobs = None
@@ -1370,9 +1378,9 @@ class OpenAIServingChat(OpenAIServingBase):
                 )
 
             # Extract prompt_token_ids if requested
-            choice_prompt_token_ids = (
+            prompt_input_ids = (
                 ret_item.get("prompt_token_ids")
-                if request.return_prompt_token_ids
+                if request.return_token_ids or request.return_prompt_token_ids
                 else None
             )
 
@@ -1400,7 +1408,7 @@ class OpenAIServingChat(OpenAIServingBase):
                     else None
                 ),
                 hidden_states=hidden_states,
-                prompt_token_ids=choice_prompt_token_ids,
+                token_ids=ret_item['output_ids'] if request.return_token_ids else None,
                 meta_info=choice_meta_info,
             )
             choices.append(choice_data)
@@ -1433,6 +1441,7 @@ class OpenAIServingChat(OpenAIServingBase):
             created=created,
             model=request.model,
             choices=choices,
+            prompt_token_ids=prompt_input_ids,
             usage=usage,
             metadata={"weight_version": ret[0]["meta_info"]["weight_version"]},
             sglext=response_sglext,
@@ -1914,6 +1923,7 @@ class OpenAIServingChat(OpenAIServingBase):
             choice_data = ChatCompletionResponseStreamChoice(
                 index=index,
                 delta=DeltaMessage(content=normal_text),
+                token_ids=content['output_ids'] if request.return_token_ids else None
                 finish_reason=None,
             )
             chunk = ChatCompletionStreamResponse(
@@ -1967,6 +1977,7 @@ class OpenAIServingChat(OpenAIServingBase):
             choice_data = ChatCompletionResponseStreamChoice(
                 index=index,
                 delta=DeltaMessage(tool_calls=[tool_call]),
+                token_ids=content['output_ids'] if request.return_token_ids else None
                 finish_reason=None,
             )
             chunk = ChatCompletionStreamResponse(
@@ -2049,6 +2060,7 @@ class OpenAIServingChat(OpenAIServingBase):
             choice_data = ChatCompletionResponseStreamChoice(
                 index=index,
                 delta=DeltaMessage(tool_calls=[tool_call]),
+                token_ids=content['output_ids'] if request.return_token_ids else None
                 finish_reason=None,  # Don't send finish_reason with this chunk
             )
 

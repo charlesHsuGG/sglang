@@ -34,6 +34,9 @@ class StreamChoice(msgspec.Struct):
     finish_reason: Optional[str] = None
     matched_stop: Union[None, int, str] = None
 
+    # not part of the OpenAI spec but for tracing the tokens
+    token_ids: list[int] | None = None
+
 
 class StreamChunk(msgspec.Struct, omit_defaults=True):
     """A complete streaming chunk."""
@@ -44,6 +47,9 @@ class StreamChunk(msgspec.Struct, omit_defaults=True):
     model: str
     choices: List[StreamChoice]
     usage: Optional[dict] = None
+
+    # not part of the OpenAI spec but for tracing the tokens
+    prompt_token_ids: list[int] | None = None
 
 
 _stream_encoder = msgspec.json.Encoder()
@@ -59,6 +65,8 @@ def build_sse_content(
     reasoning_content: Optional[str] = None,
     finish_reason: Optional[str] = None,
     logprobs: Optional[dict] = None,
+    token_ids: Optional[list[int]] = None,
+    prompt_token_ids: Optional[list[int]] = None,
     matched_stop: Union[None, int, str] = None,
     usage: Optional[dict] = None,
 ) -> str:
@@ -85,6 +93,7 @@ def build_sse_content(
         index=index,
         delta=delta,
         logprobs=logprobs,
+        token_ids=token_ids,
         finish_reason=finish_reason,
         matched_stop=matched_stop,
     )
@@ -94,6 +103,7 @@ def build_sse_content(
         created=created,
         model=model,
         choices=[choice],
+        prompt_token_ids=prompt_token_ids,
         usage=usage,
     )
     return (_SSE_DATA_B + _stream_encoder.encode(chunk) + _SSE_NL_B).decode()
