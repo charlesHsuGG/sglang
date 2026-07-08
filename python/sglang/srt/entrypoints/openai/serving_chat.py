@@ -1881,9 +1881,17 @@ class OpenAIServingChat(OpenAIServingBase):
                 ] or None
             elif request.tools:
                 tools = [item.model_dump() for item in request.tools]
-                if self.tool_call_parser == "muse" and request._template_tools:
-                    tools = request._template_tools
-            if self.tool_call_parser and not glm_constraint:
+
+            # Fallback: use generic JSON schema for required/named tool choice
+            # only when no parser-specific constraint was set
+            if request.tool_choice == "required" or isinstance(request.tool_choice, ToolChoice):
+                json_schema = get_json_schema_constraint(
+                    request.tools,
+                    request.tool_choice,
+                    parallel_tool_calls=request.parallel_tool_calls,
+                )
+                tool_call_constraint = ("json_schema", json_schema)
+            elif self.tool_call_parser:
                 parser = FunctionCallParser(
                     effective_tools,
                     self.tool_call_parser,
@@ -1894,46 +1902,6 @@ class OpenAIServingChat(OpenAIServingBase):
                     parallel_tool_calls=request.parallel_tool_calls,
                     thinking_mode=xgrammar_reasoning,
                 )
-                if (
-                    tool_call_constraint is not None
-                    and tool_call_constraint[0] == "structural_tag"
-                    and self._reasoning_detector is not None
-                    # Template tags exclude their own field closers,
-                    # which can be the think literals (Beam's <|end|>).
-                    and not isinstance(parser.detector, ResponseTemplateToolDetector)
-                ):
-                    # Same ownership rule: the reasoning parser handles think
-                    # tokens, so the grammar must not forbid them in free text.
-                    strip_structural_tag_excludes(
-                        tool_call_constraint[1],
-                        (
-                            self._reasoning_detector.think_start_token,
-                            self._reasoning_detector.think_end_token,
-                        ),
-                    )
-                required_parsed_natively = parser.detector.parses_required_natively()
-                if isinstance(parser.detector, ResponseTemplateToolDetector):
-                    template_tool_parser = parser
-                if self.chat_encoding_spec == "kimi_k3":
-                    tool_call_stop = parser.detector.eot_token
-            if (
-                tool_call_constraint is None
-                and not required_parsed_natively
-                and not (
-                    self.chat_encoding_spec == "kimi_k3"
-                    and self.tool_call_parser == "kimi_k3"
-                )
-                and (
-                    request.tool_choice == "required"
-                    or isinstance(request.tool_choice, ToolChoice)
-                )
-            ):
-                json_schema = get_json_schema_constraint(
-                    effective_tools,
-                    request.tool_choice,
-                    parallel_tool_calls=request.parallel_tool_calls,
-                )
-                tool_call_constraint = ("json_schema", json_schema)
 
         if tool_call_constraint is None and self._takes_turn_grammar(
             request, output_constrained=output_constrained

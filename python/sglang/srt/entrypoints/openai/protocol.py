@@ -1058,6 +1058,17 @@ class ChatCompletionRequest(PDRoutingFields):
     # Deprecated: use routed_dp_rank instead
     data_parallel_rank: Optional[int] = None
 
+    return_token_ids: bool | None = Field(
+        default=True,
+        description=(
+            "If specified, the result will include token IDs alongside the "
+            "generated text. In streaming mode, prompt_token_ids is included "
+            "only in the first chunk, and token_ids contains the delta tokens "
+            "for each chunk. This is useful for debugging or when you "
+            "need to map generated text back to input tokens."
+        ),
+    )
+
     # OpenAI/SGLang default sampling parameters
     _DEFAULT_SAMPLING_PARAMS = {
         "temperature": 1.0,
