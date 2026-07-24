@@ -44,7 +44,7 @@ class OpenAIServingTokenize(OpenAIServingBase):
     ) -> Union[TokenizeResponse, ErrorResponse]:
         try:
             tokenizer = self.tokenizer_manager.tokenizer
-            max_model_len = getattr(tokenizer, "model_max_length", -1)
+            max_model_len = str(getattr(tokenizer, "model_max_length", -1))
 
             if request.messages is not None:
                 token_ids = self._tokenize_chat_request(request)
