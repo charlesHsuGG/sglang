@@ -784,18 +784,18 @@ class ChatCompletionRequest(BaseModel):
     @classmethod
     def set_new_messages(cls, values):
         messages: List[ChatCompletionMessageParam] = values.get("messages")
-        firt_content = messages[0].get("content")
-        if "請根據以下對話內容生成一個約10個字的標題, 如果有車間機台或者產品相關重要信息, 需要包含在內" in firt_content:
-            firt_content = firt_content.replace(
+        first_content = messages[0].get("content")
+        if "請根據以下對話內容生成一個約10個字的標題, 如果有車間機台或者產品相關重要信息, 需要包含在內" in first_content:
+            first_content = first_content.replace(
                 "請根據以下對話內容生成一個約10個字的標題, 如果有車間機台或者產品相關重要信息, 需要包含在內\n",
                 "請根據以下對話內容生成一段標題，請務必注意禁止生成額外的說明、解釋、時間、附註、Json Markdown語法或額外項目符號。"
                 "如果以下對話有車間機台或者產品相關重要信息，需要將這些重要資訊包含在標題內。以下為對話內容:\n"
             )
-            firt_content = firt_content.replace(
+            first_content = first_content.replace(
                 "\n務必直接提供生成的標題就好，禁止生成額外的說明、解釋、時間或項目符號",
                 "\n請依據以上對話內容生成約10個字內、不換行的標題:\n"
             )
-        messages[0]["content"] = firt_content
+        messages[0]["content"] = first_content
         values["messages"] = messages
         return values
     
@@ -821,9 +821,6 @@ class ChatCompletionRequest(BaseModel):
             effort = r.get("effort") or r.get("reasoning_effort")
             if effort in {"none", "low", "medium", "high"}:
                 values["reasoning_effort"] = effort
-            
-            if values.get("tools") is not None and effort == "medium":
-                values["reasoning_effort"] = "low"
 
             enabled = (
                 r.get("enabled")
@@ -882,6 +879,8 @@ class ChatCompletionRequest(BaseModel):
 
             if "Plan" not in name_ and effort == "medium":
                 values["reasoning_effort"] = "medium"
+            elif values.get("tools") is not None and effort == "medium":
+                values["reasoning_effort"] = "low"
 
             response_format["json_schema"] = {
                 "name": name_,
