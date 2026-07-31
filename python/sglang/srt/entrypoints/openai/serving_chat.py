@@ -1923,7 +1923,7 @@ class OpenAIServingChat(OpenAIServingBase):
             choice_data = ChatCompletionResponseStreamChoice(
                 index=index,
                 delta=DeltaMessage(content=normal_text),
-                token_ids=content['output_ids'] if request.return_token_ids else None
+                token_ids=content['output_ids'] if request.return_token_ids else None,
                 finish_reason=None,
             )
             chunk = ChatCompletionStreamResponse(
@@ -1977,7 +1977,7 @@ class OpenAIServingChat(OpenAIServingBase):
             choice_data = ChatCompletionResponseStreamChoice(
                 index=index,
                 delta=DeltaMessage(tool_calls=[tool_call]),
-                token_ids=content['output_ids'] if request.return_token_ids else None
+                token_ids=content['output_ids'] if request.return_token_ids else None,
                 finish_reason=None,
             )
             chunk = ChatCompletionStreamResponse(
@@ -2060,7 +2060,7 @@ class OpenAIServingChat(OpenAIServingBase):
             choice_data = ChatCompletionResponseStreamChoice(
                 index=index,
                 delta=DeltaMessage(tool_calls=[tool_call]),
-                token_ids=content['output_ids'] if request.return_token_ids else None
+                token_ids=content['output_ids'] if request.return_token_ids else None,
                 finish_reason=None,  # Don't send finish_reason with this chunk
             )
 
