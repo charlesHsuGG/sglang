@@ -83,6 +83,7 @@ from sglang.srt.configs import (
     NemotronHPuzzleConfig,
     Olmo3Config,
     Qwen3_5Config,
+    Qwen3_5TextConfig,
     Qwen3_5MoeConfig,
     Qwen3_5MoeTextConfig,
     Qwen3_5TextConfig,
