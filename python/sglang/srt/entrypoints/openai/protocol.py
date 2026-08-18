@@ -851,6 +851,18 @@ class ChatCompletionRequest(BaseModel):
             ctk.setdefault("enable_thinking", False)
             values["chat_template_kwargs"] = ctk
 
+        response_format = values.get("response_format")
+        schema = response_format.pop("schema", None) or response_format.get("json_schema")
+        effort = r.get("effort") or r.get("reasoning_effort")
+        if schema:
+            name_ = schema.get("title", "Schema")
+            if name_ in ["MiniPlan", "Plan"] and effort == "medium":
+                values["reasoning_effort"] = "medium"
+            elif effort == "medium":
+                values["reasoning_effort"] = "low"
+        elif effort == "medium":
+            values["reasoning_effort"] = "low"
+
         return values
 
     @model_validator(mode="before")
@@ -876,11 +888,6 @@ class ChatCompletionRequest(BaseModel):
                 item = schema["properties"].pop("strict", None)
                 if item and item.get("default", False):
                     strict_ = True
-
-            if "Plan" not in name_ and effort == "medium":
-                values["reasoning_effort"] = "medium"
-            elif values.get("tools") is not None and effort == "medium":
-                values["reasoning_effort"] = "low"
 
             response_format["json_schema"] = {
                 "name": name_,
