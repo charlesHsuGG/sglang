@@ -851,7 +851,7 @@ class ChatCompletionRequest(BaseModel):
             ctk.setdefault("enable_thinking", False)
             values["chat_template_kwargs"] = ctk
 
-        effort = r.get("effort") or r.get("reasoning_effort")
+        effort = values.get("reasoning_effort")
         response_format = values.get("response_format")
         schema = None
         if response_format:
