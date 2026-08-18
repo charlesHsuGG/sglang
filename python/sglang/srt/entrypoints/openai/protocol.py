@@ -862,7 +862,7 @@ class ChatCompletionRequest(BaseModel):
                 values["reasoning_effort"] = "medium"
             elif effort == "medium":
                 values["reasoning_effort"] = "low"
-        elif effort == "medium":
+        elif values.get("tools") is not None and effort == "medium":
             values["reasoning_effort"] = "low"
 
         return values
