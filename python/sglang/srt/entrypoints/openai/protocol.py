@@ -851,9 +851,11 @@ class ChatCompletionRequest(BaseModel):
             ctk.setdefault("enable_thinking", False)
             values["chat_template_kwargs"] = ctk
 
-        response_format = values.get("response_format")
-        schema = response_format.pop("schema", None) or response_format.get("json_schema")
         effort = r.get("effort") or r.get("reasoning_effort")
+        response_format = values.get("response_format")
+        schema = None
+        if response_format:
+            schema = response_format.get("schema", None) or response_format.get("json_schema")
         if schema:
             name_ = schema.get("title", "Schema")
             if name_ in ["MiniPlan", "Plan"] and effort == "medium":
