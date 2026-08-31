@@ -1137,8 +1137,6 @@ class ChatCompletionResponseChoice(BaseModel):
     ] = None
     matched_stop: Union[None, int, str] = None
     hidden_states: Optional[object] = None
-    prompt_token_ids: Optional[List[int]] = None
-    response_token_ids: Optional[List[int]] = None
     meta_info: Optional[Dict[str, Any]] = None
 
     # not part of the OpenAI spec but is useful for tracing the tokens
@@ -1150,10 +1148,6 @@ class ChatCompletionResponseChoice(BaseModel):
         data = handler(self)
         if self.hidden_states is None:
             data.pop("hidden_states", None)
-        if self.prompt_token_ids is None:
-            data.pop("prompt_token_ids", None)
-        if self.response_token_ids is None:
-            data.pop("response_token_ids", None)
         if self.meta_info is None:
             data.pop("meta_info", None)
         if self.token_ids is None:
