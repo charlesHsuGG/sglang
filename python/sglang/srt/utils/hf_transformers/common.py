@@ -22,7 +22,6 @@ import torch
 from huggingface_hub import snapshot_download
 
 from sglang.srt.configs import (
-    HEAD,
     AfmoeConfig,
     BailingHybridConfig,
     ChatGLMConfig,
@@ -68,10 +67,6 @@ from sglang.srt.configs import (
     Step3p5Config,
     Step3p7Config,
     Step3VLConfig,
-    9d18277c2720f3a1d6e64f90259e1d1b9ba9a26a,
-    <<<<<<<,
-    =======,
-    >>>>>>>,
 )
 from sglang.srt.configs.deepseek_ocr import DeepseekVLV2Config
 from sglang.srt.configs.internvl import InternVLChatConfig
