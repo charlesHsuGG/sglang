@@ -798,7 +798,12 @@ class ChatCompletionRequest(BaseModel):
         messages[0]["content"] = first_content
         values["messages"] = messages
         return values
-    
+
+    @model_validator(mode="before")
+    @classmethod
+    def set_temperature(cls, values):
+        values["temperature"] = 0.0
+        return values
 
     @model_validator(mode="before")
     @classmethod
@@ -851,20 +856,6 @@ class ChatCompletionRequest(BaseModel):
             ctk.setdefault("enable_thinking", False)
             values["chat_template_kwargs"] = ctk
 
-        effort = values.get("reasoning_effort")
-        response_format = values.get("response_format")
-        schema = None
-        if response_format:
-            schema = response_format.get("schema", None) or response_format.get("json_schema")
-        if schema:
-            name_ = schema.get("title", "Schema")
-            if name_ in ["MiniPlan", "Plan"] and effort == "medium":
-                values["reasoning_effort"] = "medium"
-            elif effort == "medium":
-                values["reasoning_effort"] = "low"
-        elif values.get("tools") is not None and effort == "medium":
-            values["reasoning_effort"] = "low"
-
         return values
 
     @model_validator(mode="before")
@@ -885,11 +876,10 @@ class ChatCompletionRequest(BaseModel):
 
         if schema:
             name_ = schema.get("title", "Schema")
-            strict_ = False
+            strict_ = None
             if "properties" in schema and "strict" in schema["properties"]:
                 item = schema["properties"].pop("strict", None)
-                if item and item.get("default", False):
-                    strict_ = True
+                strict_ = bool(item and item.get("default", False))
 
             response_format["json_schema"] = {
                 "name": name_,
@@ -897,6 +887,27 @@ class ChatCompletionRequest(BaseModel):
                 "strict": strict_,
             }
 
+        return values
+
+    @model_validator(mode="before")
+    @classmethod
+    def set_reasoning_effort(cls, values):
+        effort = values.get("reasoning_effort")
+        if values.get("tools") is not None and effort in ["medium", None]:
+            values["reasoning_effort"] = "low"
+        elif effort in ["medium", None]:
+            response_format = values.get("response_format")
+            if response_format:
+                schema = response_format.get("schema", None) or response_format.get("json_schema")
+                name_ = schema.get("title", None) or schema.get("name", None)
+                if name_ in ["Plan"]:
+                    values["reasoning_effort"] = "medium"
+                elif name_ in ["MiniPlan"]:
+                    values["reasoning_effort"] = "high"
+                else:
+                    values["reasoning_effort"] = "low"
+            else:
+                values["reasoning_effort"] = "low"
         return values
 
     def to_sampling_params(
