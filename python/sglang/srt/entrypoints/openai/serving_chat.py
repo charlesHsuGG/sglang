@@ -2464,7 +2464,7 @@ class OpenAIServingChat(OpenAIServingBase):
         output_token_logprobs = ret_item["meta_info"]["output_token_logprobs"]
         output_top_logprobs = ret_item["meta_info"].get("output_top_logprobs", None)
         token_logprobs = self._build_token_logprobs_from_raw(
-            output_token_logprobs, output_top_logprobs, use_token_index=True
+            output_token_logprobs, output_top_logprobs
         )
         return ChoiceLogprobs(content=token_logprobs)
 
@@ -2472,7 +2472,6 @@ class OpenAIServingChat(OpenAIServingBase):
         self,
         output_token_logprobs: list[Any],
         output_top_logprobs: list[Any] | None,
-        use_token_index: bool = False,
     ) -> list[ChatCompletionTokenLogprob]:
         """Build OpenAI ChatCompletionTokenLogprob from the engine's raw
         ``(logprob, token_id, token_text)`` triples.
@@ -2506,13 +2505,9 @@ class OpenAIServingChat(OpenAIServingBase):
 
             top_logprobs: list[TopLogprob] = []
             if output_top_logprobs:
-                # - Non-streaming (use_token_index=True): output_top_logprobs is
-                #   the full per-position list; take the row for this token.
-                # - Streaming (use_token_index=False): rows are pre-sliced so the
-                #   current chunk holds exactly one row at index 0.
-                top_row_idx = token_idx if use_token_index else 0
-                if top_row_idx < len(output_top_logprobs):
-                    top_row = output_top_logprobs[top_row_idx]
+                # Both callers pass rows aligned with output_token_logprobs.
+                if token_idx < len(output_top_logprobs):
+                    top_row = output_top_logprobs[token_idx]
                     if top_row is not None:
                         for top_logprob, top_id, top_text in top_row:
                             if is_byte_level:
@@ -2705,7 +2700,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 n_prev_token:total_output_logprobs
             ]
         token_logprobs = self._build_token_logprobs_from_raw(
-            output_token_logprobs, output_top_logprobs, use_token_index=False
+            output_token_logprobs, output_top_logprobs
         )
         return ChoiceLogprobs(content=token_logprobs)
 
