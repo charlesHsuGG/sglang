@@ -1761,6 +1761,7 @@ class OpenAIServingChat(OpenAIServingBase):
         cache_key = None
         if use_cache:
             try:
+                # Key order is part of the key: templates render dicts in their given order.
                 cache_key = orjson.dumps(
                     (
                         getattr(
@@ -1773,7 +1774,6 @@ class OpenAIServingChat(OpenAIServingBase):
                         template_kwargs,
                         encode_kwargs,
                     ),
-                    option=orjson.OPT_SORT_KEYS,
                 )
             except TypeError:
                 pass
