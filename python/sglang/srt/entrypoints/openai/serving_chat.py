@@ -2100,6 +2100,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 # First chunk with role
                 if is_firsts.get(index, True):
                     is_firsts[index] = False
+                    # K2 templates require preserved thinking, including empty reasoning.
                     yield build_sse_content(
                         chunk_id=content["meta_info"]["id"],
                         created=int(time.time()),
@@ -2112,6 +2113,12 @@ class OpenAIServingChat(OpenAIServingBase):
                             if request.return_token_ids or request.return_prompt_token_ids
                             else None
                         )
+                        reasoning_content=(
+                            ""
+                            if self.reasoning_parser == "k2_horizon"
+                            and request.separate_reasoning
+                            else None
+                        ),
                     )
                     stream_started = True
 
@@ -2465,7 +2472,7 @@ class OpenAIServingChat(OpenAIServingBase):
                     role="assistant",
                     content=text if text else "",
                     tool_calls=tool_calls,
-                    reasoning_content=reasoning_text if reasoning_text else None,
+                    reasoning_content=reasoning_text,
                 ),
                 logprobs=choice_logprobs,
                 finish_reason=finish_reason["type"] if finish_reason else None,
