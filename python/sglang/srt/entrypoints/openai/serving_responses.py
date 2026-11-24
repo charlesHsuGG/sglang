@@ -1217,7 +1217,14 @@ class OpenAIServingResponses(OpenAIServingChat):
             )
             detector_owns_format = self._tool_parser_owns_format(parser)
             should_try_native = not is_required or detector_owns_format
+            if should_try_native and parser.has_tool_call(content):
                 try:
+                    content, calls = parser.parse_non_stream(
+                        content, preserve_incomplete=True
+                    )
+                    incomplete_calls = _incomplete_tool_call_indices(parser)
+                    parsed_via_native = bool(calls)
+                except Exception as e:
                     logger.error("Tool call parsing error: %s", e)
 
         if (

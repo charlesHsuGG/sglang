@@ -1403,6 +1403,8 @@ class ChatCompletionResponseStreamChoice(BaseModel):
         data = handler(self)
         if self.token_ids is None:
             data.pop("token_ids", None)
+        if self.delta.tool_calls is None:
+            data["delta"].pop("tool_calls", None)
         return data
 
 

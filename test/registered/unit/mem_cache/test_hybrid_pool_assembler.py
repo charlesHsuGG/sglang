@@ -404,6 +404,7 @@ class TestDraftSidecarPoolDispatch(CustomTestCase):
     def test_full_builder_registers_separate_dsa_draft_indexer(self):
         """The separate-draft DSA branch must build its indexer mirror from a
         DRAFT_INDEXER decl. A constructor change that skips this call site
+        breaks only here, not on the target path."""
         draft_kv_pool = object.__new__(DSATokenToKVPool)
         draft_kv_pool.layer_num = 1
         draft_kv_pool.size = 800

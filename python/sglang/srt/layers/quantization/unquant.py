@@ -1117,19 +1117,8 @@ class UnquantizedFusedMoEMethod(FusedMoEMethodBase, BaseFusedOp):
         param: torch.nn.Parameter,
         weight_name: str,
     ) -> None:
-        """Restore canonical BF16 MoE load shapes before hot weight copy.
-
-        The flashinfer TRT-LLM BF16 postprocess reshapes expert weights into
-        block layout. During weight update, checkpoint tensors are in
-        canonical layout and need a temporary shape restore for copy.
-        """
-        # Must mirror the gate of the block-layout reshape in
-        # process_weights_after_loading: use_flashinfer_trtllm_moe covers both
-        # the routed and non-routed TRT-LLM backends. Gating on
-        # is_flashinfer_trtllm_routed() only left the non-routed path
-        # block-shaped during update_weights_from_tensor (issue #27787).
-        # if not self.use_flashinfer_trtllm_moe:
-        if not get_moe_runner_backend().is_flashinfer_trtllm_routed():
+        """Restore checkpoint layout for both routed and non-routed TRT-LLM backends."""
+        if not self.use_flashinfer_trtllm_moe:
             return
 
         param_name = _fused_expert_weight_name(weight_name)
