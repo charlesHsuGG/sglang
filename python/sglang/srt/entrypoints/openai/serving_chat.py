@@ -896,6 +896,7 @@ class OpenAIServingChat(OpenAIServingBase):
                     index=index,
                     reasoning_content=reasoning_text,
                     logprobs=remaining_logprobs,
+                    token_ids=content['output_ids'] if request.return_token_ids else None,
                     usage=usage,
                     internal_content=wire.internal_content(
                         index, reasoning_text, kind="reasoning"
@@ -967,6 +968,7 @@ class OpenAIServingChat(OpenAIServingBase):
                     index=index,
                     content=delta,
                     logprobs=remaining_logprobs,
+                    token_ids=content['output_ids'] if request.return_token_ids else None,
                     usage=usage,
                     internal_content=wire.internal_content(
                         index, delta, kind="content"
@@ -2623,6 +2625,11 @@ class OpenAIServingChat(OpenAIServingBase):
                             and request.separate_reasoning
                             else None
                         ),
+                        prompt_token_ids=(
+                            adapted_request.input_ids
+                            if request.return_token_ids or request.return_prompt_token_ids
+                            else None
+                        )
                     )
                     stream_started = True
 
@@ -2955,6 +2962,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 output_ids=output_ids,
             )
 
+        choice_prompt_token_ids = None
         encoding_output = self._encoding_output()
         for idx, ret_item in enumerate(ret):
             # Process logprobs
@@ -3072,8 +3080,7 @@ class OpenAIServingChat(OpenAIServingBase):
                     else None
                 ),
                 hidden_states=hidden_states,
-                prompt_token_ids=choice_prompt_token_ids,
-                response_token_ids=choice_token_ids,
+                token_ids=choice_token_ids,
                 meta_info=choice_meta_info,
             )
             choices.append(choice_data)
@@ -3116,6 +3123,7 @@ class OpenAIServingChat(OpenAIServingBase):
             usage=usage,
             metadata=build_endpoint_weight_version_metadata(ret[0]["meta_info"]),
             sglext=response_sglext,
+            prompt_token_ids=choice_prompt_token_ids,
         )
 
     def _process_response_logprobs(self, ret_item: dict[str, Any]) -> ChoiceLogprobs:
@@ -3778,6 +3786,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 choice_data = ChatCompletionResponseStreamChoice(
                     index=index,
                     delta=DeltaMessage(content=normal_text),
+                    token_ids=content['output_ids'] if request.return_token_ids else None,
                     internal_content=wire.internal_content(
                         index, normal_text, kind="content"
                     ),
@@ -3856,6 +3865,7 @@ class OpenAIServingChat(OpenAIServingBase):
                     choice_data = ChatCompletionResponseStreamChoice(
                         index=index,
                         delta=DeltaMessage(tool_calls=[tool_call]),
+                        token_ids=content['output_ids'] if request.return_token_ids else None,
                         # The tokens behind this call delta go out once.
                         internal_content=call_internal if position == 0 else None,
                         finish_reason=None,
@@ -3957,6 +3967,7 @@ class OpenAIServingChat(OpenAIServingBase):
             choice_data = ChatCompletionResponseStreamChoice(
                 index=index,
                 delta=DeltaMessage(tool_calls=[tool_call]),
+                token_ids=content['output_ids'] if request.return_token_ids else None,
                 # A flush has no generated source of its own.
                 internal_content=wire.internal_content(index, None, kind="tool"),
                 finish_reason=None,  # Don't send finish_reason with this chunk

@@ -1439,19 +1439,17 @@ class ChatCompletionResponseChoice(BaseModel):
     ] = None
     matched_stop: Union[None, int, str] = None
     hidden_states: Optional[object] = None
-    prompt_token_ids: Optional[List[int]] = None
-    response_token_ids: Optional[List[int]] = None
     meta_info: Optional[Dict[str, Any]] = None
+
+    token_ids: Optional[List[int]] = None
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler):
         data = handler(self)
         if self.hidden_states is None:
             data.pop("hidden_states", None)
-        if self.prompt_token_ids is None:
-            data.pop("prompt_token_ids", None)
-        if self.response_token_ids is None:
-            data.pop("response_token_ids", None)
+        if self.token_ids is None:
+            data.pop("token_ids", None)
         if self.meta_info is None:
             data.pop("meta_info", None)
         return data
@@ -1467,9 +1465,13 @@ class ChatCompletionResponse(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     sglext: Optional[SglExt] = None
 
+    prompt_token_ids: Optional[List[int]] = None
+
     @model_serializer(mode="wrap")
     def _serialize(self, handler):
         data = handler(self)
+        if self.prompt_token_ids is None:
+            data.pop("prompt_token_ids", None)
         if self.sglext is None:
             data.pop("sglext", None)
         return data
@@ -1512,6 +1514,9 @@ class ChatCompletionResponseStreamChoice(BaseModel):
     matched_stop: Union[None, int, str] = None
     internal_content: Optional[List[Dict[str, Any]]] = None
 
+    # not part of the OpenAI spec but for tracing the tokens
+    token_ids: list[int] | None = None
+
     @model_serializer(mode="wrap")
     def _serialize(self, handler):
         data = handler(self)
@@ -1519,6 +1524,8 @@ class ChatCompletionResponseStreamChoice(BaseModel):
             data.pop("internal_content", None)
         if self.delta.tool_calls is None:
             data["delta"].pop("tool_calls", None)
+        if self.token_ids is None:
+            data.pop("token_ids", None)
         return data
 
 
@@ -1531,11 +1538,16 @@ class ChatCompletionStreamResponse(BaseModel):
     usage: Optional[UsageInfo] = None
     sglext: Optional[SglExt] = None
 
+    # not part of the OpenAI spec but for tracing the tokens
+    prompt_token_ids: list[int] | None = None
+
     @model_serializer(mode="wrap")
     def _serialize(self, handler):
         data = handler(self)
         if self.sglext is None:
             data.pop("sglext", None)
+        if self.prompt_token_ids is None:
+            data.pop("prompt_token_ids", None)
         return data
 
 
