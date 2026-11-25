@@ -1140,20 +1140,6 @@ class ChatCompletionRequest(PDRoutingFields):
     # Priority for the request
     priority: Optional[int] = None
 
-    # Deprecated: use routed_dp_rank instead
-    data_parallel_rank: Optional[int] = None
-
-    return_token_ids: bool | None = Field(
-        default=True,
-        description=(
-            "If specified, the result will include token IDs alongside the "
-            "generated text. In streaming mode, prompt_token_ids is included "
-            "only in the first chunk, and token_ids contains the delta tokens "
-            "for each chunk. This is useful for debugging or when you "
-            "need to map generated text back to input tokens."
-        ),
-    )
-
     # OpenAI/SGLang default sampling parameters
     _DEFAULT_SAMPLING_PARAMS = {
         "temperature": 1.0,
@@ -1453,21 +1439,21 @@ class ChatCompletionResponseChoice(BaseModel):
     ] = None
     matched_stop: Union[None, int, str] = None
     hidden_states: Optional[object] = None
+    prompt_token_ids: Optional[List[int]] = None
+    response_token_ids: Optional[List[int]] = None
     meta_info: Optional[Dict[str, Any]] = None
-
-    # not part of the OpenAI spec but is useful for tracing the tokens
-    # in agent scenarios
-    token_ids: list[int] | None = None
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler):
         data = handler(self)
         if self.hidden_states is None:
             data.pop("hidden_states", None)
+        if self.prompt_token_ids is None:
+            data.pop("prompt_token_ids", None)
+        if self.response_token_ids is None:
+            data.pop("response_token_ids", None)
         if self.meta_info is None:
             data.pop("meta_info", None)
-        if self.token_ids is None:
-            data.pop("token_ids", None)
         return data
 
 
@@ -1481,16 +1467,11 @@ class ChatCompletionResponse(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     sglext: Optional[SglExt] = None
 
-    # vLLM-specific fields that are not in OpenAI spec
-    prompt_token_ids: list[int] | None = None
-
     @model_serializer(mode="wrap")
     def _serialize(self, handler):
         data = handler(self)
         if self.sglext is None:
             data.pop("sglext", None)
-        if self.prompt_token_ids is None:
-            data.pop("prompt_token_ids", None)
         return data
 
 
@@ -1531,14 +1512,9 @@ class ChatCompletionResponseStreamChoice(BaseModel):
     matched_stop: Union[None, int, str] = None
     internal_content: Optional[List[Dict[str, Any]]] = None
 
-    # not part of the OpenAI spec but for tracing the tokens
-    token_ids: list[int] | None = None
-
     @model_serializer(mode="wrap")
     def _serialize(self, handler):
         data = handler(self)
-        if self.token_ids is None:
-            data.pop("token_ids", None)
         if self.internal_content is None:
             data.pop("internal_content", None)
         if self.delta.tool_calls is None:
@@ -1555,16 +1531,11 @@ class ChatCompletionStreamResponse(BaseModel):
     usage: Optional[UsageInfo] = None
     sglext: Optional[SglExt] = None
 
-    # not part of the OpenAI spec but for tracing the tokens
-    prompt_token_ids: list[int] | None = None
-
     @model_serializer(mode="wrap")
     def _serialize(self, handler):
         data = handler(self)
         if self.sglext is None:
             data.pop("sglext", None)
-        if self.prompt_token_ids is None:
-            data.pop("prompt_token_ids", None)
         return data
 
 
